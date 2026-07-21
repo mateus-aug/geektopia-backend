@@ -1,0 +1,441 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------- ENUMS ----------------
+
+enum StatusPedidoEnum {
+  Pendente
+  Pago
+  Cancelado
+  Expirado
+}
+
+enum StatusIngressoEnum {
+  Valido
+  Utilizado
+  Cancelado
+}
+
+enum StatusAprovacaoEnum {
+  EmAnalise
+  Aprovado
+  Reprovado
+}
+
+enum StatusInscricaoCompeticaoEnum {
+  AguardandoPagamento
+  EmAnalise
+  Aprovado
+  Reprovado
+}
+
+enum ModalidadeCompeticaoEnum {
+  Solo
+  Dupla
+  Grupo
+}
+
+enum StatusContaAdminEnum {
+  Ativo
+  Inativo
+}
+
+enum StatusEventoEnum {
+  Bloqueado
+  VendasAbertas
+  VendasEncerradas
+  Encerrado
+}
+
+enum NivelPermissaoAdminEnum {
+  ADMIN_GERAL
+  ADMIN_CONTEUDO
+}
+
+enum MetodoPagamentoEnum {
+  Pix
+  CartaoCredito
+  CartaoDebito
+  Boleto
+  SaldoConta
+}
+
+enum StatusPagamentoEnum {
+  Pendente
+  Aprovado
+  Recusado
+  Estornado
+}
+
+enum TipoCredencialEnum {
+  PARTICIPANTE
+  STAFF
+  EXPOSITOR
+  COSPLAYER
+}
+
+// ---------------- TABELAS DE PESSOA / USUÁRIO ----------------
+
+model Usuario {
+  id_usuario      Int      @id @default(autoincrement())
+  id_responsavel  Int? // Opcional: Apenas menores de idade
+  nome_completo   String   @db.VarChar(100)
+  cpf             String?  @unique @db.VarChar(11)
+  cnpj            String?  @unique @db.VarChar(14)
+  passaporte      String?  @unique @db.VarChar(20)
+  data_nascimento DateTime @db.Date
+  email           String   @unique @db.VarChar(100)
+  senha           String   @db.VarChar(255)
+  telefone        String?  @db.VarChar(20)
+  genero          String?  @db.VarChar(50)
+  sexualidade     String?  @db.VarChar(50)
+  cidade          String?  @db.VarChar(30)
+  data_cadastro   DateTime @default(now())
+
+  // Relacionamentos
+  responsavel        Responsavel?         @relation(fields: [id_responsavel], references: [id_responsavel])
+  perfil             Perfil?
+  participante       Participante?
+  expositor          Expositor?
+  administrador      Administrador?
+  organizadorExterno Organizador_Externo?
+  credenciais        Credencial[]
+  pedidos            Pedido[]
+  feedbacks          Feedback[]
+  ingressos          Ingresso[]
+}
+
+model Responsavel {
+  id_responsavel   Int     @id @default(autoincrement())
+  email            String  @db.VarChar(100)
+  nome_completo    String  @db.VarChar(150)
+  cpf              String  @unique @db.VarChar(11)
+  url_documento_rg String? @db.Text
+
+  usuarios Usuario[]
+}
+
+model Perfil {
+  id_usuario Int     @id @unique
+  nickname   String? @unique @db.VarChar(30)
+  avatar_url String? @db.Text
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+}
+
+model Participante {
+  id_usuario                 Int     @id
+  status_verificacao         Boolean @default(false)
+  autorizado_por_responsavel Boolean @default(false)
+
+  usuario    Usuario     @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  competidor Competidor?
+}
+
+model Competidor {
+  id_usuario            Int     @id
+  nickname_competidor   String? @db.VarChar(30)
+  pronomes              String? @db.VarChar(20)
+  modalidade_principal  String? @db.VarChar(50)
+  url_portfolio         String? @db.Text
+  link_redes_sociais    String? @db.Text
+  url_autorizacao_menor String? @db.Text
+
+  participante     Participante           @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  equipesLideradas Equipe_Competicao[]
+  inscricoes       Inscricao_Competicao[]
+}
+
+model Expositor {
+  id_usuario        Int                 @id
+  tipo_expositor    String?             @db.VarChar(50)
+  nome_loja_projeto String?             @db.VarChar(100)
+  url_portfolio     String?             @db.Text
+  status_aprovacao  StatusAprovacaoEnum @default(EmAnalise)
+
+  usuario      Usuario              @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  solicitacoes Solicitacao_Espaco[]
+}
+
+model Administrador {
+  id_usuario      Int                      @id
+  nivel_permissao NivelPermissaoAdminEnum?
+  status_conta    StatusContaAdminEnum     @default(Ativo)
+  departamento    String?                  @db.VarChar(50)
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+}
+
+model Organizador_Externo {
+  id_usuario          Int                 @id
+  instituicao_empresa String?             @db.VarChar(100)
+  cargo_funcao        String?             @db.VarChar(50)
+  telefone_comercial  String?             @db.VarChar(20)
+  status_aprovacao    StatusAprovacaoEnum @default(EmAnalise)
+
+  usuario         Usuario          @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  eventosExternos Evento_Externo[]
+}
+
+model Credencial {
+  id_credencial Int                 @id @default(autoincrement())
+  id_usuario    Int // Obrigatório
+  id_geektopia  Int // Obrigatório
+  id_ingresso   Int? // Opcional: Credencial de Staff/Expositor pode não ter ingresso
+  nome_exibicao String?             @db.VarChar(100)
+  tipo_usuario  TipoCredencialEnum?
+  codigo_qr     String?             @unique @db.VarChar(255)
+
+  usuario   Usuario   @relation(fields: [id_usuario], references: [id_usuario])
+  geektopia Geektopia @relation(fields: [id_geektopia], references: [id_geektopia])
+  ingresso  Ingresso? @relation(fields: [id_ingresso], references: [id_ingresso])
+}
+
+model Ajudante_Expositor {
+  id_ajudante    Int     @id @default(autoincrement())
+  id_solicitacao Int // Obrigatório
+  nome_completo  String? @db.VarChar(150)
+  cpf            String? @db.VarChar(11)
+
+  solicitacao Solicitacao_Espaco @relation(fields: [id_solicitacao], references: [id_solicitacao])
+}
+
+// ---------------- TABELAS FINANCEIRAS ----------------
+
+model Pedido {
+  id_pedido         Int              @id @default(autoincrement())
+  id_usuario        Int // Obrigatório: Todo pedido pertence a um usuário
+  data_pedido       DateTime         @default(now())
+  valor_total_bruto Decimal?         @db.Decimal(10, 2)
+  status_pedido     StatusPedidoEnum @default(Pendente)
+
+  usuario              Usuario                @relation(fields: [id_usuario], references: [id_usuario])
+  itens                Item_Pedido[]
+  pagamento            Pagamento?
+  solicitacoesEspaco   Solicitacao_Espaco[]
+  inscricoesCompeticao Inscricao_Competicao[]
+}
+
+model Item_Pedido {
+  id_item                Int      @id @default(autoincrement())
+  id_pedido              Int // Obrigatório: Todo item pertence a um pedido
+  id_lote                Int? // Opcional se for uma taxa/espaço
+  quantidade             Int?
+  preco_unitario_momento Decimal? @db.Decimal(10, 2)
+  subtotal               Decimal? @db.Decimal(10, 2)
+
+  pedido    Pedido     @relation(fields: [id_pedido], references: [id_pedido])
+  lote      Lote?      @relation(fields: [id_lote], references: [id_lote])
+  ingressos Ingresso[]
+}
+
+model Pagamento {
+  id_pagamento     Int                  @id @default(autoincrement())
+  id_pedido        Int                  @unique // Obrigatório: Pagamento é 1:1 com Pedido
+  status_pagamento StatusPagamentoEnum  @default(Pendente)
+  valor_total      Decimal              @db.Decimal(10, 2)
+  metodo_pagamento MetodoPagamentoEnum?
+  codigo_transacao String?              @db.VarChar(255)
+  data_pagamento   DateTime?
+
+  pedido Pedido @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade)
+}
+
+// ---------------- TABELAS DE EVENTOS E ESPAÇOS ----------------
+
+model Evento_Externo {
+  id_evento_externo   Int       @id @default(autoincrement())
+  id_organizador      Int // Obrigatório
+  nome_evento         String    @db.VarChar(150)
+  data_evento         DateTime?
+  local               String?   @db.VarChar(200)
+  descricao           String?   @db.Text
+  url_saiba_mais      String?   @db.Text
+  regras_idade_minima String?   @db.Text
+
+  organizador Organizador_Externo @relation(fields: [id_organizador], references: [id_usuario])
+}
+
+model Geektopia {
+  id_geektopia        Int              @id @default(autoincrement())
+  nome_edicao         String           @db.VarChar(150)
+  data_inicio         DateTime?
+  data_fim            DateTime?
+  local               String?          @db.VarChar(200)
+  descricao           String?          @db.Text
+  banner_url          String?          @db.Text
+  status_evento       StatusEventoEnum @default(Bloqueado)
+  regras_idade_minima String?          @db.Text
+  aviso_documentacao  String?          @db.Text
+  qnt_dias            Int?
+
+  lotes              Lote[]
+  solicitacoesEspaco Solicitacao_Espaco[]
+  feedbacks          Feedback[]
+  competicoes        Competicao[]
+  programacoes       Programacao[]
+  ingressos          Ingresso[]
+  credenciais        Credencial[]
+}
+
+model Lote {
+  id_lote          Int      @id @default(autoincrement())
+  id_geektopia     Int // Obrigatório: Todo lote pertence a um evento
+  nome_lote        String?  @db.VarChar(50)
+  valor_ingresso   Decimal? @db.Decimal(10, 2)
+  quantidade_total Int?
+
+  geektopia   Geektopia     @relation(fields: [id_geektopia], references: [id_geektopia])
+  itensPedido Item_Pedido[]
+  ingressos   Ingresso[]
+}
+
+model Espaco {
+  id_espaco                Int      @id @default(autoincrement())
+  tipo_espaco              String?  @db.VarChar(100)
+  largura_espaco           Decimal? @db.Decimal(5, 2)
+  comprimento_espaco       Decimal? @db.Decimal(5, 2)
+  qtd_mesas                Int?
+  largura_mesa             Decimal? @db.Decimal(5, 2)
+  comprimento_mesa         Decimal? @db.Decimal(5, 2)
+  quantidade_cadeiras      Int?
+  qtd_credenciais_inclusas Int?
+  valor_base               Decimal? @db.Decimal(10, 2)
+  valor_taxa_ajudante      Decimal? @db.Decimal(10, 2)
+  valor_taxa_mesa_extra    Decimal? @db.Decimal(10, 2)
+  valor_taxa_cadeira_extra Decimal? @db.Decimal(10, 2)
+  descricao                String?  @db.Text
+
+  solicitacoes Solicitacao_Espaco[]
+}
+
+model Solicitacao_Espaco {
+  id_solicitacao                   Int                 @id @default(autoincrement())
+  id_usuario                       Int // Obrigatório: Pertence ao Expositor
+  id_geektopia                     Int // Obrigatório: Pertence à edição do evento
+  id_espaco                        Int // Obrigatório: Tipo de espaço solicitado
+  id_pedido                        Int? // Opcional até ser aprovado/gerar cobrança
+  qtd_ajudantes_extras             Int?                @default(0)
+  valor_taxa_ajudante_momento      Decimal?            @db.Decimal(10, 2)
+  qtd_mesas_extras                 Int?                @default(0)
+  valor_taxa_mesa_extra_momento    Decimal?            @db.Decimal(10, 2)
+  qtd_cadeiras_extras              Int?                @default(0)
+  valor_taxa_cadeira_extra_momento Decimal?            @db.Decimal(10, 2)
+  valor_total_final                Decimal?            @db.Decimal(10, 2)
+  status_solicitacao               StatusAprovacaoEnum @default(EmAnalise)
+  url_contrato_assinado            String?             @db.Text
+
+  expositor Expositor            @relation(fields: [id_usuario], references: [id_usuario])
+  geektopia Geektopia            @relation(fields: [id_geektopia], references: [id_geektopia])
+  espaco    Espaco               @relation(fields: [id_espaco], references: [id_espaco])
+  pedido    Pedido?              @relation(fields: [id_pedido], references: [id_pedido])
+  ajudantes Ajudante_Expositor[]
+}
+
+model Feedback {
+  id_feedback  Int       @id @default(autoincrement())
+  id_geektopia Int // Obrigatório
+  id_usuario   Int // Obrigatório
+  nota         Int?
+  comentario   String?   @db.Text
+  data_envio   DateTime? @default(now())
+
+  geektopia Geektopia @relation(fields: [id_geektopia], references: [id_geektopia])
+  usuario   Usuario   @relation(fields: [id_usuario], references: [id_usuario])
+}
+
+model Competicao {
+  id_competicao        Int                       @id @default(autoincrement())
+  id_geektopia         Int // Obrigatório: Toda competição pertence ao evento
+  nome_competicao      String?                   @db.VarChar(100)
+  modalidade           ModalidadeCompeticaoEnum?
+  valor_taxa_inscricao Decimal?                  @db.Decimal(10, 2)
+  regras_url           String?                   @db.Text
+
+  geektopia    Geektopia              @relation(fields: [id_geektopia], references: [id_geektopia])
+  equipes      Equipe_Competicao[]
+  programacoes Programacao[]
+  inscricoes   Inscricao_Competicao[]
+}
+
+model Equipe_Competicao {
+  id_equipe            Int     @id @default(autoincrement())
+  id_competicao        Int // Obrigatório
+  id_lider             Int // Obrigatório: Pertence ao Competidor líder
+  nome_equipe          String  @db.VarChar(100)
+  link_portfolio_grupo String? @db.Text
+
+  competicao Competicao             @relation(fields: [id_competicao], references: [id_competicao])
+  lider      Competidor             @relation(fields: [id_lider], references: [id_usuario])
+  inscricoes Inscricao_Competicao[]
+}
+
+model Programacao {
+  id_programacao   Int       @id @default(autoincrement())
+  id_geektopia     Int // Obrigatório
+  id_competicao    Int? // Opcional: Nem toda atração é uma competição (ex: palestra)
+  titulo_atividade String    @db.VarChar(150)
+  data_hora_inicio DateTime
+  data_hora_fim    DateTime?
+
+  geektopia  Geektopia   @relation(fields: [id_geektopia], references: [id_geektopia])
+  competicao Competicao? @relation(fields: [id_competicao], references: [id_competicao])
+}
+
+// ---------------- TABELAS DE IDENTIFICAÇÃO E INSCRIÇÃO ----------------
+
+model Ingresso {
+  id_ingresso       Int                @id @default(autoincrement())
+  id_usuario        Int // Obrigatório
+  id_geektopia      Int // Obrigatório
+  id_lote           Int // Obrigatório
+  id_item           Int? // Opcional: Se for cortesia/manual pode não ter item de pedido
+  codigo_qr         String             @unique @db.VarChar(255)
+  status_ingresso   StatusIngressoEnum @default(Valido)
+  data_checkin      DateTime?
+  nome_titular      String?            @db.VarChar(255)
+  documento_titular String?            @db.VarChar(50)
+
+  usuario     Usuario      @relation(fields: [id_usuario], references: [id_usuario])
+  geektopia   Geektopia    @relation(fields: [id_geektopia], references: [id_geektopia])
+  lote        Lote         @relation(fields: [id_lote], references: [id_lote])
+  itemPedido  Item_Pedido? @relation(fields: [id_item], references: [id_item])
+  credenciais Credencial[]
+}
+
+model Inscricao_Competicao {
+  id_inscricao               Int                           @id @default(autoincrement())
+  id_competicao              Int // Obrigatório
+  id_usuario                 Int // Obrigatório
+  id_equipe                  Int? // Opcional: Nulo se for modalidade Solo
+  id_pedido                  Int? // Opcional: Nulo se a competição for gratuita
+  url_portfolio_apresentacao String?                       @db.Text
+  link_audio_apresentacao    String?                       @db.Text
+  status_inscricao           StatusInscricaoCompeticaoEnum @default(AguardandoPagamento)
+  data_inscricao             DateTime?                     @default(now())
+
+  competicao Competicao         @relation(fields: [id_competicao], references: [id_competicao])
+  competidor Competidor         @relation(fields: [id_usuario], references: [id_usuario])
+  equipe     Equipe_Competicao? @relation(fields: [id_equipe], references: [id_equipe])
+  pedido     Pedido?            @relation(fields: [id_pedido], references: [id_pedido])
+}
+
+// ---------------- INSTITUCIONAL / SITE ----------------
+
+model Historia_Institucional {
+  id_historia    Int     @id @default(autoincrement())
+  titulo         String? @db.VarChar(150)
+  texto_historia String? @db.Text
+}
+
+model Galeria_Edicoes_Passadas {
+  id_galeria          Int     @id @default(autoincrement())
+  nome_edicao_passada String? @db.VarChar(150)
+  ano                 Int?
+  url_foto            String? @db.Text
+}
