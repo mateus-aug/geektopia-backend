@@ -1,0 +1,8 @@
+# Trata todos os arquivos de texto automaticamente
+* text=auto
+
+# Garante que arquivos de código usem sempre LF no repositório
+*.js text eol=lf
+*.json text eol=lf
+*.prisma text eol=lf
+.gitignore text eol=lf
