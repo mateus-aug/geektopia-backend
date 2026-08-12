@@ -71,8 +71,9 @@ function validarDados(corpo, ehCriacao) {
       return { erro: 'O campo "valor_ingresso" é obrigatório e deve ser maior que zero.' };
     }
 
-    // A coluna guarda 2 casas decimais. Arredondar aqui evita que o banco
-    // trunque em silêncio e o preço exibido fique diferente do cadastrado.
+    // A coluna guarda 2 casas decimais e o PostgreSQL já arredonda sozinho na
+    // gravação. Arredondamos aqui para que a checagem de valor máximo logo
+    // abaixo enxergue exatamente o número que será gravado.
     const arredondado = Math.round(valor * 100) / 100;
 
     if (arredondado >= VALOR_MAXIMO) {
