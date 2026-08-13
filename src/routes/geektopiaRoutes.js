@@ -4,6 +4,8 @@ const geektopiaController = require('../controllers/geektopiaController');
 // A listagem de lotes fica sob este prefixo por ser rota aninhada
 // (/api/geektopia/:id/lotes), mas a lógica pertence ao loteController.
 const loteController = require('../controllers/loteController');
+const programacaoController = require('../controllers/programacaoController');
+const competicaoController = require('../controllers/competicaoController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
 // Guard provisório: barra quem não é administrador.
@@ -22,6 +24,8 @@ function exigirAdmin(req, res, next) {
 router.get('/admin/todas', authMiddleware, exigirAdmin, geektopiaController.listarTodas);
 router.get('/admin/:id', authMiddleware, exigirAdmin, geektopiaController.buscarPorId);
 router.get('/admin/:id/lotes', authMiddleware, exigirAdmin, loteController.listarPorGeektopia);
+router.get('/admin/:id/programacao', authMiddleware, exigirAdmin, programacaoController.listarPorGeektopia);
+router.get('/admin/:id/competicoes', authMiddleware, exigirAdmin, competicaoController.listarPorGeektopia);
 router.post('/', authMiddleware, exigirAdmin, geektopiaController.criar);
 router.put('/:id', authMiddleware, exigirAdmin, geektopiaController.atualizar);
 router.patch('/:id/status', authMiddleware, exigirAdmin, geektopiaController.alterarStatus);
@@ -31,5 +35,7 @@ router.delete('/:id', authMiddleware, exigirAdmin, geektopiaController.remover);
 router.get('/', geektopiaController.listarPublicas);
 router.get('/:id', geektopiaController.buscarPorId);
 router.get('/:id/lotes', loteController.listarPorGeektopia);
+router.get('/:id/programacao', programacaoController.listarPorGeektopia);
+router.get('/:id/competicoes', competicaoController.listarPorGeektopia);
 
 module.exports = router;
