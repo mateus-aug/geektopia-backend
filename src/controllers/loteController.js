@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { lerId, lerTexto } = require('../utils/validadores');
 
 // Status de edição que o público pode enxergar. Se a edição está 'Bloqueado',
 // os lotes dela também ficam invisíveis.
@@ -6,19 +7,6 @@ const STATUS_PUBLICOS = ['VendasAbertas', 'VendasEncerradas', 'Encerrado'];
 
 // DECIMAL(10,2) comporta no máximo 8 dígitos antes da vírgula.
 const VALOR_MAXIMO = 100000000;
-
-// Converte o :id da URL em inteiro positivo. Devolve null se não servir.
-function lerId(valor) {
-  const numero = Number(valor);
-  return Number.isInteger(numero) && numero > 0 ? numero : null;
-}
-
-// Limpa um texto, respeitando o limite da coluna.
-function lerTexto(valor, limite) {
-  if (typeof valor !== 'string') return null;
-  const limpo = valor.trim();
-  return limpo.length === 0 || limpo.length > limite ? null : limpo;
-}
 
 // Monta a resposta de um lote.
 //

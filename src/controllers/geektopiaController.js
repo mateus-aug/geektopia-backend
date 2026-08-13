@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { lerId, lerData, lerTexto } = require('../utils/validadores');
 
 // Status que o público pode enxergar. 'Bloqueado' é rascunho da diretoria.
 const STATUS_PUBLICOS = ['VendasAbertas', 'VendasEncerradas', 'Encerrado'];
@@ -16,26 +17,6 @@ const CAMPOS_DA_LISTA = {
   banner_url: true,
   status_evento: true
 };
-
-// Converte o :id da URL em inteiro positivo. Devolve null se não servir.
-function lerId(valor) {
-  const numero = Number(valor);
-  return Number.isInteger(numero) && numero > 0 ? numero : null;
-}
-
-// Converte texto ISO em Date. Devolve null se a data não existir de verdade.
-function lerData(valor) {
-  if (typeof valor !== 'string') return null;
-  const data = new Date(valor);
-  return Number.isNaN(data.getTime()) ? null : data;
-}
-
-// Limpa um texto opcional, respeitando o limite da coluna.
-function lerTexto(valor, limite) {
-  if (typeof valor !== 'string') return null;
-  const limpo = valor.trim();
-  return limpo.length === 0 || limpo.length > limite ? null : limpo;
-}
 
 // Valida os campos enviados. Só devolve o que veio no corpo, para o PUT
 // conseguir alterar um campo sem apagar os outros.
