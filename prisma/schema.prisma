@@ -94,6 +94,7 @@ model Usuario {
   telefone        String?  @db.VarChar(20)
   genero          String?  @db.VarChar(50)
   sexualidade     String?  @db.VarChar(50)
+  estado          String?  @db.VarChar(2)   
   cidade          String?  @db.VarChar(30)
   data_cadastro   DateTime @default(now())
 
