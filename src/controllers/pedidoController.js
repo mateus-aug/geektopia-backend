@@ -59,7 +59,7 @@ const preference = new Preference(client);
         })),
         external_reference: JSON.stringify({
           id_pedido: novoPedido.id_pedido,
-          id_geektopia: id_geektopia || 7 // Alterado para 7 (ID válido no seu banco)
+          id_geektopia: id_geektopia || 7 
         }),
         notification_url: webhookUrl,
         back_urls: {
@@ -95,7 +95,7 @@ exports.receberWebhook = async (req, res) => {
 
     if (type === 'payment' && paymentId) {
       const payment = new Payment(client);
-      const pagamentoInfo = await payment.get({ paymentId });
+      const pagamentoInfo = await payment.get({ id: paymentId });
       
 
       const statusMP = pagamentoInfo.status;
@@ -112,7 +112,14 @@ exports.receberWebhook = async (req, res) => {
             data_pagamento: new Date(),
           }
         });
+        const pedidoExistente = await prisma.pedido.findUnique({
+          where: { id_pedido: idPedidoBanco }
+        });
 
+        if (pedidoExistente.status_pedido === 'Pago') {
+          console.log(`⚠️ Pedido #${idPedidoBanco} já estava Pago. Notificação duplicada ignorada.`);
+          return res.sendStatus(200);
+        }
         const pedidoAtualizado = await prisma.pedido.update({
           where: { id_pedido: idPedidoBanco },
           data: { status_pedido: 'Pago' },
