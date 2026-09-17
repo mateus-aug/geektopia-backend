@@ -11,6 +11,7 @@ const institucionalRoutes = require('./institucionalRoutes');
 const pedidoRoutes = require('./pedidoRoutes'); // <-- 1. Importa as rotas de pedido (Mateus)
 const parceiroRoutes = require('./parceiroRoutes');
 const inscricaoRoutes = require('./inscricaoRoutes');
+const ingressoRoutes = require('./ingressoRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
@@ -24,5 +25,6 @@ router.use('/institucional', institucionalRoutes);
 router.use('/pedidos', pedidoRoutes); // <-- 2. Conecta no caminho /api/pedidos (Mateus)
 router.use('/parceiros', parceiroRoutes);
 router.use('/inscricoes', inscricaoRoutes);
+router.use('/ingressos', ingressoRoutes);
 
 module.exports = router;
