@@ -82,6 +82,12 @@ exports.register = async (req, res) => {
 
     delete newUser.senha;
 
+    if (!senhaAtendeRequisitos(senha)) {
+      return res.status(400).json({
+        error: 'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.'
+      });
+    }
+
     return res.status(201).json({ message: 'Usuário cadastrado com sucesso!', user: newUser });
   } catch (error) {
     console.error('Erro no cadastro:', error);
@@ -201,6 +207,12 @@ exports.changePassword = async (req, res) => {
     const user = await prisma.usuario.findUnique({
       where: { id_usuario: req.userId }
     });
+
+    if (!senhaAtendeRequisitos(nova_senha)) {
+      return res.status(400).json({
+        error: 'A nova senha deve ter no mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.'
+      });
+    }
 
     const passwordMatch = await bcrypt.compare(senha_atual, user.senha);
     if (!passwordMatch) {
