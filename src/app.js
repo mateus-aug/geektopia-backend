@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
+const path = require('path');
 
 const app = express();
 
@@ -9,6 +10,8 @@ app.use(express.json());
 
 // Todas as rotas ficarão sob /api
 app.use('/api', routes);
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req, res) => {
   return res.json({ message: 'API GEEKTOPIA / NEXUS rodando com sucesso!' });

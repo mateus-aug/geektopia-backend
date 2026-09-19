@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
+const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 
 // ===================================================
 // 1. AUTENTICAÇÃO E CADASTRO
@@ -164,6 +165,10 @@ exports.updateProfile = async (req, res) => {
   try {
     const { nome_completo, telefone, cidade, nickname, avatar_url } = req.body;
 
+    const dadosPerfil = {};
+    if (nickname !== undefined && nickname !== '') dadosPerfil.nickname = nickname;
+    if (avatar_url !== undefined) dadosPerfil.avatar_url = avatar_url;
+
     const updatedUser = await prisma.usuario.update({
       where: { id_usuario: req.userId },
       data: {
@@ -172,14 +177,12 @@ exports.updateProfile = async (req, res) => {
         cidade,
         perfil: {
           upsert: {
-            create: { nickname, avatar_url },
-            update: { nickname, avatar_url }
+            create: { nickname: nickname || null, avatar_url },
+            update: dadosPerfil
           }
         }
       },
-      include: {
-        perfil: true
-      }
+      include: { perfil: true }
     });
 
     delete updatedUser.senha;
@@ -231,6 +234,34 @@ exports.deleteMyAccount = async (req, res) => {
   }
 };
 
+// Upload de avatar
+exports.uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
+    }
+
+    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/avatars/${req.file.filename}`;
+
+    await prisma.usuario.update({
+      where: { id_usuario: req.userId },
+      data: {
+        perfil: {
+          upsert: {
+            create: { avatar_url: avatarUrl },
+            update: { avatar_url: avatarUrl }
+          }
+        }
+      }
+    });
+
+    return res.json({ message: 'Foto atualizada com sucesso!', avatar_url: avatarUrl });
+  } catch (error) {
+    console.error('Erro ao fazer upload do avatar:', error);
+    return res.status(500).json({ error: 'Erro ao enviar foto.' });
+  }
+};
+
 // ===================================================
 // 3. MÓDULO ADMINISTRATIVO (EXCLUSIVO ADMINS)
 // ===================================================
@@ -279,11 +310,13 @@ exports.promoteToAdmin = async (req, res) => {
       return res.status(400).json({ error: 'Este usuário já possui permissão de Administrador.' });
     }
 
+    const { nivel_permissao } = req.body; // ajuste a desestruturação lá em cima também
+
     const newAdmin = await prisma.administrador.create({
       data: {
-        id_usuario: Number(id_usuario),
-        nivel_acesso: nivel_acesso || 'STAFF'
-      }
+      id_usuario: Number(id_usuario),
+      nivel_permissao: nivel_permissao || 'ADMIN_CONTEUDO'
+     }
     });
 
     return res.status(201).json({ message: 'Usuário promovido a administrador com sucesso!', admin: newAdmin });

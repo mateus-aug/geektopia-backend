@@ -4,6 +4,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middlewares/authMiddleware');
 const adminMiddleware = require('../middlewares/adminMiddleware');
+const uploadMiddleware = require('../middlewares/uploadMiddleware');
 
 // === ROTAS PÚBLICAS ===
 router.post('/register', authController.register);
@@ -14,6 +15,7 @@ router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.patch('/change-password', authMiddleware, authController.changePassword);
 router.delete('/delete-account', authMiddleware, authController.deleteMyAccount);
+router.post('/upload-avatar', authMiddleware, uploadMiddleware.single('avatar'), authController.uploadAvatar);
 
 // === ROTAS PAINEL ADM (Requer ser Admin) ===
 router.get('/admin/users', authMiddleware, adminMiddleware, authController.getAllUsers);
