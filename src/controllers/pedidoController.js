@@ -1,11 +1,8 @@
-const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
+const { Preference, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
-
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN
-});
+const { client, baseUrl } = require('../services/paymentService');
 
 // Monta a resposta de um pedido, convertendo os Decimal do Prisma (pedido,
 // itens e pagamento) em número comum, igual ao padrão usado no restante da API.
@@ -123,9 +120,8 @@ exports.criarPedido = async (req, res) => {
       include: { itens: true }
     });
 
-    // Trata a URL do .env para remover barras extras no final e evitar erros de rota
-    const baseUrl = (process.env.URL_WEBHOOK || '').trim().replace(/\/$/, '');
-    const webhookUrl = `${baseUrl}/api/pedidos/webhook`;
+    const url = baseUrl();
+    const webhookUrl = `${url}/api/pedidos/webhook`;
 
     console.log(`📍 Webhook URL enviada ao Mercado Pago: ${webhookUrl}`);
 
@@ -137,9 +133,9 @@ exports.criarPedido = async (req, res) => {
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
         notification_url: webhookUrl,
         back_urls: {
-          success: `${baseUrl}/api/pedidos/sucesso`,
-          failure: `${baseUrl}/api/pedidos/falha`,
-          pending: `${baseUrl}/api/pedidos/pendente`
+          success: `${url}/api/pedidos/sucesso`,
+          failure: `${url}/api/pedidos/falha`,
+          pending: `${url}/api/pedidos/pendente`
         },
         auto_return: 'approved'
       }
@@ -157,6 +153,27 @@ exports.criarPedido = async (req, res) => {
   }
 };
 
+// Traduz o método que o Mercado Pago informou para o enum do schema.
+// `payment_method_id` identifica o Pix especificamente; os demais casos vêm
+// em `payment_type_id`. Cai em null (em vez de adivinhar) quando o Mercado
+// Pago manda um tipo que não mapeamos — errado seria gravar um valor chutado.
+function mapearMetodoPagamento(pagamentoInfo) {
+  if (pagamentoInfo.payment_method_id === 'pix') return 'Pix';
+
+  switch (pagamentoInfo.payment_type_id) {
+    case 'credit_card':
+      return 'CartaoCredito';
+    case 'debit_card':
+      return 'CartaoDebito';
+    case 'ticket':
+      return 'Boleto';
+    case 'account_money':
+      return 'SaldoConta';
+    default:
+      return null;
+  }
+}
+
 // Aplica os efeitos de um pagamento aprovado: marca o Pagamento/Pedido como
 // Pago e gera os Ingressos. Compartilhado pelo webhook e pela sincronização
 // manual (item 5) — os dois descobrem o mesmo jeito que um pagamento foi
@@ -169,6 +186,7 @@ async function aplicarPagamentoAprovado(idPedidoBanco, pagamentoInfo) {
     where: { id_pedido: idPedidoBanco },
     data: {
       status_pagamento: 'Aprovado',
+      metodo_pagamento: mapearMetodoPagamento(pagamentoInfo),
       codigo_transacao: String(pagamentoInfo.id),
       data_pagamento: new Date()
     }

@@ -1,5 +1,7 @@
+const { Preference } = require('mercadopago');
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
+const { client, baseUrl } = require('../services/paymentService');
 
 // Valores aceitos pelo enum StatusAprovacaoEnum do schema.prisma.
 const STATUS_VALIDOS = ['EmAnalise', 'Aprovado', 'Reprovado'];
@@ -491,5 +493,234 @@ exports.remover = async (req, res) => {
   } catch (error) {
     console.error('Erro ao remover solicitação de espaço:', error);
     return res.status(500).json({ error: 'Erro ao remover a solicitação.' });
+  }
+};
+
+// ==========================================================================
+// AJUDANTES DO EXPOSITOR
+// ==========================================================================
+//
+// A quantidade paga fica em qtd_ajudantes_extras (definida na candidatura);
+// aqui só cadastramos QUEM são essas pessoas (nome/CPF), até esse limite.
+
+// Confere se a solicitação existe e pertence a quem está logado (ou é admin).
+// Usada pelas 3 rotas de ajudante abaixo.
+async function conferirDonoDaSolicitacao(id, req) {
+  const solicitacao = await prisma.solicitacao_Espaco.findUnique({
+    where: { id_solicitacao: id },
+    select: { id_usuario: true, status_solicitacao: true, qtd_ajudantes_extras: true }
+  });
+
+  if (!solicitacao || (solicitacao.id_usuario !== req.userId && req.userIsAdmin !== true)) {
+    return { erro: { status: 404, mensagem: 'Solicitação não encontrada.' } };
+  }
+
+  return { solicitacao };
+}
+
+// POST /api/solicitacoes-espaco/:id/ajudantes - cadastra um ajudante
+// Corpo: { nome_completo?, cpf? }
+exports.adicionarAjudante = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'O identificador da solicitação é inválido.' });
+    }
+
+    const { erro, solicitacao } = await conferirDonoDaSolicitacao(id, req);
+
+    if (erro) {
+      return res.status(erro.status).json({ error: erro.mensagem });
+    }
+
+    if (solicitacao.status_solicitacao !== STATUS_EDITAVEL) {
+      return res.status(409).json({
+        error: 'Só é possível cadastrar ajudantes enquanto a solicitação está em análise.'
+      });
+    }
+
+    const jaCadastrados = await prisma.ajudante_Expositor.count({ where: { id_solicitacao: id } });
+
+    if (jaCadastrados >= solicitacao.qtd_ajudantes_extras) {
+      return res.status(409).json({
+        error:
+          `Esta solicitação reservou ${solicitacao.qtd_ajudantes_extras} ajudante(s) extra(s) e já ` +
+          `tem ${jaCadastrados} cadastrado(s). Para adicionar mais, aumente a quantidade na própria solicitação.`
+      });
+    }
+
+    const nomeCompleto = req.body.nome_completo === undefined ? null : lerTexto(req.body.nome_completo, 150);
+    const cpf = req.body.cpf === undefined ? null : lerTexto(req.body.cpf, 11);
+
+    const novo = await prisma.ajudante_Expositor.create({
+      data: { id_solicitacao: id, nome_completo: nomeCompleto, cpf }
+    });
+
+    return res.status(201).json({ message: 'Ajudante cadastrado com sucesso!', ajudante: novo });
+  } catch (error) {
+    console.error('Erro ao cadastrar ajudante:', error);
+    return res.status(500).json({ error: 'Erro ao cadastrar o ajudante.' });
+  }
+};
+
+// GET /api/solicitacoes-espaco/:id/ajudantes - lista os ajudantes cadastrados
+exports.listarAjudantes = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'O identificador da solicitação é inválido.' });
+    }
+
+    const { erro } = await conferirDonoDaSolicitacao(id, req);
+
+    if (erro) {
+      return res.status(erro.status).json({ error: erro.mensagem });
+    }
+
+    const ajudantes = await prisma.ajudante_Expositor.findMany({
+      where: { id_solicitacao: id },
+      orderBy: { id_ajudante: 'asc' }
+    });
+
+    return res.json(ajudantes);
+  } catch (error) {
+    console.error('Erro ao listar ajudantes:', error);
+    return res.status(500).json({ error: 'Erro ao listar os ajudantes.' });
+  }
+};
+
+// DELETE /api/solicitacoes-espaco/:id/ajudantes/:idAjudante
+exports.removerAjudante = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+    const idAjudante = lerId(req.params.idAjudante);
+
+    if (!id || !idAjudante) {
+      return res.status(400).json({ error: 'Identificador inválido.' });
+    }
+
+    const { erro, solicitacao } = await conferirDonoDaSolicitacao(id, req);
+
+    if (erro) {
+      return res.status(erro.status).json({ error: erro.mensagem });
+    }
+
+    if (solicitacao.status_solicitacao !== STATUS_EDITAVEL) {
+      return res.status(409).json({
+        error: 'Só é possível remover ajudantes enquanto a solicitação está em análise.'
+      });
+    }
+
+    const ajudante = await prisma.ajudante_Expositor.findUnique({ where: { id_ajudante: idAjudante } });
+
+    if (!ajudante || ajudante.id_solicitacao !== id) {
+      return res.status(404).json({ error: 'Ajudante não encontrado nesta solicitação.' });
+    }
+
+    await prisma.ajudante_Expositor.delete({ where: { id_ajudante: idAjudante } });
+
+    return res.json({ message: 'Ajudante removido com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao remover ajudante:', error);
+    return res.status(500).json({ error: 'Erro ao remover o ajudante.' });
+  }
+};
+
+// POST /api/solicitacoes-espaco/:id/pagamento - gera a cobrança da taxa desta
+// solicitação no Mercado Pago (Checkout Pro: aceita Pix, cartão e boleto sem
+// configuração extra).
+//
+// Só depois de aprovada: a diretoria decide o valor final antes de cobrar
+// (o "estudo" combinado com o cliente), e o valor já vem congelado em
+// `valor_total_final` desde a candidatura, então uma mudança posterior no
+// catálogo de Espaco não muda o que este expositor paga.
+//
+// O Pedido criado aqui não tem Item_Pedido (não é ingresso) — só é ligado à
+// solicitação pelo campo id_pedido. O webhook/receberWebhook já lida bem com
+// isso: ele só gera Ingresso para itens que têm id_lote, e um Pedido sem
+// nenhum item simplesmente não gera nenhum. Nenhuma mudança foi necessária
+// lá.
+exports.gerarPagamento = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'O identificador da solicitação é inválido.' });
+    }
+
+    const solicitacao = await prisma.solicitacao_Espaco.findUnique({
+      where: { id_solicitacao: id },
+      include: { espaco: { select: { tipo_espaco: true } } }
+    });
+
+    if (!solicitacao || solicitacao.id_usuario !== req.userId) {
+      return res.status(404).json({ error: 'Solicitação não encontrada.' });
+    }
+
+    if (solicitacao.status_solicitacao !== 'Aprovado') {
+      return res.status(409).json({
+        error: 'Só é possível gerar a cobrança depois que a diretoria aprovar a solicitação.'
+      });
+    }
+
+    // Já existe uma cobrança (paga ou pendente) para não duplicar. Quem quiser
+    // saber o status consulta o pedido diretamente.
+    if (solicitacao.id_pedido !== null) {
+      return res.status(409).json({
+        error: 'Esta solicitação já tem uma cobrança gerada.',
+        id_pedido: solicitacao.id_pedido
+      });
+    }
+
+    const valor = Number(solicitacao.valor_total_final);
+
+    if (!Number.isFinite(valor) || valor <= 0) {
+      return res.status(409).json({ error: 'Esta solicitação não tem um valor definido para cobrança.' });
+    }
+
+    const novoPedido = await prisma.pedido.create({
+      data: {
+        id_usuario: req.userId,
+        valor_total_bruto: valor,
+        status_pedido: 'Pendente',
+        pagamento: { create: { valor_total: valor, status_pagamento: 'Pendente' } },
+        solicitacoesEspaco: { connect: { id_solicitacao: id } }
+      }
+    });
+
+    const url = baseUrl();
+
+    const preference = new Preference(client);
+    const result = await preference.create({
+      body: {
+        items: [
+          {
+            title: `Taxa de espaço — ${solicitacao.espaco.tipo_espaco || 'Expositor'}`,
+            unit_price: valor,
+            quantity: 1,
+            currency_id: 'BRL'
+          }
+        ],
+        external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
+        notification_url: `${url}/api/pedidos/webhook`,
+        back_urls: {
+          success: `${url}/api/pedidos/sucesso`,
+          failure: `${url}/api/pedidos/falha`,
+          pending: `${url}/api/pedidos/pendente`
+        },
+        auto_return: 'approved'
+      }
+    });
+
+    return res.status(201).json({
+      message: 'Cobrança gerada com sucesso!',
+      id_pedido: novoPedido.id_pedido,
+      init_point: result.init_point
+    });
+  } catch (error) {
+    console.error('Erro ao gerar pagamento da solicitação de espaço:', error);
+    return res.status(500).json({ error: 'Erro interno ao gerar o pagamento.' });
   }
 };
