@@ -19,5 +19,11 @@ router.get('/minhas', authMiddleware, solicitacaoEspacoController.listarMinhas);
 router.get('/:id', authMiddleware, solicitacaoEspacoController.buscarPorId);
 router.put('/:id', authMiddleware, solicitacaoEspacoController.atualizar);
 router.delete('/:id', authMiddleware, solicitacaoEspacoController.remover);
+router.post('/:id/pagamento', authMiddleware, solicitacaoEspacoController.gerarPagamento);
+
+// Ajudantes cadastrados na solicitação (nome/CPF), até o limite pago.
+router.post('/:id/ajudantes', authMiddleware, solicitacaoEspacoController.adicionarAjudante);
+router.get('/:id/ajudantes', authMiddleware, solicitacaoEspacoController.listarAjudantes);
+router.delete('/:id/ajudantes/:idAjudante', authMiddleware, solicitacaoEspacoController.removerAjudante);
 
 module.exports = router;
