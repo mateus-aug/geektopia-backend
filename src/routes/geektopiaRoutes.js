@@ -7,29 +7,19 @@ const loteController = require('../controllers/loteController');
 const programacaoController = require('../controllers/programacaoController');
 const competicaoController = require('../controllers/competicaoController');
 const authMiddleware = require('../middlewares/authMiddleware');
-
-// Guard provisório: barra quem não é administrador.
-// Roda sempre DEPOIS do authMiddleware, que é quem preenche req.userIsAdmin.
-function exigirAdmin(req, res, next) {
-  // 403 e não 401: a pessoa está autenticada, só não tem permissão.
-  if (req.userIsAdmin !== true) {
-    return res.status(403).json({ error: 'Acesso restrito a administradores.' });
-  }
-
-  return next();
-}
+const adminMiddleware = require('../middlewares/adminMiddleware');
 
 // Rotas administrativas. Declaradas antes das que usam ':id' para deixar
 // claro que '/admin/...' é caminho fixo, não um identificador.
-router.get('/admin/todas', authMiddleware, exigirAdmin, geektopiaController.listarTodas);
-router.get('/admin/:id', authMiddleware, exigirAdmin, geektopiaController.buscarPorId);
-router.get('/admin/:id/lotes', authMiddleware, exigirAdmin, loteController.listarPorGeektopia);
-router.get('/admin/:id/programacao', authMiddleware, exigirAdmin, programacaoController.listarPorGeektopia);
-router.get('/admin/:id/competicoes', authMiddleware, exigirAdmin, competicaoController.listarPorGeektopia);
-router.post('/', authMiddleware, exigirAdmin, geektopiaController.criar);
-router.put('/:id', authMiddleware, exigirAdmin, geektopiaController.atualizar);
-router.patch('/:id/status', authMiddleware, exigirAdmin, geektopiaController.alterarStatus);
-router.delete('/:id', authMiddleware, exigirAdmin, geektopiaController.remover);
+router.get('/admin/todas', authMiddleware, adminMiddleware, geektopiaController.listarTodas);
+router.get('/admin/:id', authMiddleware, adminMiddleware, geektopiaController.buscarPorId);
+router.get('/admin/:id/lotes', authMiddleware, adminMiddleware, loteController.listarPorGeektopia);
+router.get('/admin/:id/programacao', authMiddleware, adminMiddleware, programacaoController.listarPorGeektopia);
+router.get('/admin/:id/competicoes', authMiddleware, adminMiddleware, competicaoController.listarPorGeektopia);
+router.post('/', authMiddleware, adminMiddleware, geektopiaController.criar);
+router.put('/:id', authMiddleware, adminMiddleware, geektopiaController.atualizar);
+router.patch('/:id/status', authMiddleware, adminMiddleware, geektopiaController.alterarStatus);
+router.delete('/:id', authMiddleware, adminMiddleware, geektopiaController.remover);
 
 // Rotas públicas: qualquer visitante acessa, sem token.
 router.get('/', geektopiaController.listarPublicas);

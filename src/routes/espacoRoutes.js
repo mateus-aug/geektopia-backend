@@ -2,22 +2,12 @@ const express = require('express');
 const router = express.Router();
 const espacoController = require('../controllers/espacoController');
 const authMiddleware = require('../middlewares/authMiddleware');
-
-// Guard provisório: barra quem não é administrador.
-// Roda sempre DEPOIS do authMiddleware, que é quem preenche req.userIsAdmin.
-function exigirAdmin(req, res, next) {
-  // 403 e não 401: a pessoa está autenticada, só não tem permissão.
-  if (req.userIsAdmin !== true) {
-    return res.status(403).json({ error: 'Acesso restrito a administradores.' });
-  }
-
-  return next();
-}
+const adminMiddleware = require('../middlewares/adminMiddleware');
 
 // Rotas administrativas.
-router.post('/', authMiddleware, exigirAdmin, espacoController.criar);
-router.put('/:id', authMiddleware, exigirAdmin, espacoController.atualizar);
-router.delete('/:id', authMiddleware, exigirAdmin, espacoController.remover);
+router.post('/', authMiddleware, adminMiddleware, espacoController.criar);
+router.put('/:id', authMiddleware, adminMiddleware, espacoController.atualizar);
+router.delete('/:id', authMiddleware, adminMiddleware, espacoController.remover);
 
 // Rotas públicas.
 // Não há versão "admin" da consulta aqui: Espaco é um catálogo global, sem
