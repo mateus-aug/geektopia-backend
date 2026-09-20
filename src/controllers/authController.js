@@ -191,7 +191,7 @@ exports.getMe = async (req, res) => {
 // Atualizar dados do perfil do usuário logado
 exports.updateProfile = async (req, res) => {
   try {
-    const { nome_completo, telefone, cidade, nickname, avatar_url } = req.body;
+    const { nome_completo, telefone, cidade, estado, nickname, avatar_url } = req.body;
 
     const dadosPerfil = {};
     if (nickname !== undefined && nickname !== '') dadosPerfil.nickname = nickname;
@@ -203,6 +203,7 @@ exports.updateProfile = async (req, res) => {
         nome_completo,
         telefone,
         cidade,
+        estado,
         perfil: {
           upsert: {
             create: { nickname: nickname || null, avatar_url },
@@ -332,7 +333,7 @@ exports.getAllUsers = async (req, res) => {
 exports.promoteToAdmin = async (req, res) => {
   try {
     const { id_usuario } = req.params;
-    const { nivel_acesso } = req.body;
+    const { nivel_permissao } = req.body;
 
     const targetUser = await prisma.usuario.findUnique({
       where: { id_usuario: Number(id_usuario) },
@@ -346,8 +347,6 @@ exports.promoteToAdmin = async (req, res) => {
     if (targetUser.administrador) {
       return res.status(400).json({ error: 'Este usuário já possui permissão de Administrador.' });
     }
-
-    const { nivel_permissao } = req.body; // ajuste a desestruturação lá em cima também
 
     const newAdmin = await prisma.administrador.create({
       data: {
