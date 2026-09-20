@@ -21,5 +21,7 @@ router.post('/upload-avatar', authMiddleware, uploadMiddleware.single('avatar'),
 router.get('/admin/users', authMiddleware, adminMiddleware, authController.getAllUsers);
 router.post('/admin/promote/:id_usuario', authMiddleware, adminMiddleware, authController.promoteToAdmin);
 router.delete('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminDeleteUser);
+router.put('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminUpdateUser);
+router.patch('/admin/demote/:id_usuario', authMiddleware, adminMiddleware, authController.demoteAdmin);
 
 module.exports = router;
