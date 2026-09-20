@@ -1,7 +1,7 @@
 const { Preference } = require('mercadopago');
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
-const { client, baseUrl, frontendUrl } = require('../services/paymentService');
+const { client, baseUrl, backUrlDoPedido } = require('../services/paymentService');
 
 // Valores aceitos pelo enum StatusAprovacaoEnum do schema.prisma.
 const STATUS_VALIDOS = ['EmAnalise', 'Aprovado', 'Reprovado'];
@@ -690,7 +690,7 @@ exports.gerarPagamento = async (req, res) => {
       }
     });
 
-    const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
+    const voltarUrl = backUrlDoPedido(novoPedido.id_pedido);
 
     const preference = new Preference(client);
     const result = await preference.create({
@@ -706,9 +706,9 @@ exports.gerarPagamento = async (req, res) => {
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
         notification_url: `${baseUrl()}/api/pedidos/webhook`,
         back_urls: {
-          success: confirmacaoUrl,
-          failure: confirmacaoUrl,
-          pending: confirmacaoUrl
+          success: voltarUrl,
+          failure: voltarUrl,
+          pending: voltarUrl
         },
         auto_return: 'approved'
       }

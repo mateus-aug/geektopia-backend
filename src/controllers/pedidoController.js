@@ -2,7 +2,7 @@ const { Preference, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
-const { client, baseUrl, frontendUrl } = require('../services/paymentService');
+const { client, baseUrl, frontendUrl, backUrlDoPedido } = require('../services/paymentService');
 
 // Monta a resposta de um pedido, convertendo os Decimal do Prisma (pedido,
 // itens e pagamento) em número comum, igual ao padrão usado no restante da API.
@@ -121,10 +121,11 @@ exports.criarPedido = async (req, res) => {
     });
 
     const webhookUrl = `${baseUrl()}/api/pedidos/webhook`;
-    // As três telas de retorno vão para a mesma página de confirmação do
-    // front: ela mesma consulta o /sincronizar e mostra o status certo,
-    // então não precisa de uma tela separada para cada caso.
-    const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
+    // As três telas de retorno vão para a mesma "ponte" (ver backUrlDoPedido),
+    // que reencaminha pra página de confirmação do front — ela mesma consulta
+    // o /sincronizar e mostra o status certo, então não precisa de uma tela
+    // separada para cada caso.
+    const voltarUrl = backUrlDoPedido(novoPedido.id_pedido);
 
     console.log(`📍 Webhook URL enviada ao Mercado Pago: ${webhookUrl}`);
 
@@ -136,9 +137,9 @@ exports.criarPedido = async (req, res) => {
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
         notification_url: webhookUrl,
         back_urls: {
-          success: confirmacaoUrl,
-          failure: confirmacaoUrl,
-          pending: confirmacaoUrl
+          success: voltarUrl,
+          failure: voltarUrl,
+          pending: voltarUrl
         },
         auto_return: 'approved'
       }
@@ -387,4 +388,17 @@ exports.sincronizarPagamento = async (req, res) => {
     console.error('Erro ao sincronizar pagamento:', error);
     return res.status(500).json({ error: 'Erro interno ao consultar o status do pagamento.' });
   }
+};
+
+// 6. PONTE PARA O FRONT-END
+// GET /api/pedidos/:id/voltar - usada como back_url no Mercado Pago.
+//
+// Existe só porque o auto_return do Mercado Pago exige um back_url em HTTPS,
+// e o front em desenvolvimento roda em localhost sem HTTPS. Esta rota é
+// pública (o Mercado Pago não anexa nenhum token) e só repassa o navegador
+// de quem comprou para a tela de confirmação de verdade, no front local.
+exports.voltarParaFrontend = (req, res) => {
+  const id = lerId(req.params.id);
+  const destino = id ? `${frontendUrl()}/pedido/${id}/confirmacao` : frontendUrl();
+  return res.redirect(302, destino);
 };
