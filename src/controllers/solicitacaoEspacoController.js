@@ -1,7 +1,7 @@
 const { Preference } = require('mercadopago');
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
-const { client, baseUrl, backUrlDoPedido } = require('../services/paymentService');
+const { client, baseUrl, frontendUrl } = require('../services/paymentService');
 
 // Valores aceitos pelo enum StatusAprovacaoEnum do schema.prisma.
 const STATUS_VALIDOS = ['EmAnalise', 'Aprovado', 'Reprovado'];
@@ -690,7 +690,7 @@ exports.gerarPagamento = async (req, res) => {
       }
     });
 
-    const voltarUrl = backUrlDoPedido(novoPedido.id_pedido);
+    const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
 
     const preference = new Preference(client);
     const result = await preference.create({
@@ -706,11 +706,12 @@ exports.gerarPagamento = async (req, res) => {
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
         notification_url: `${baseUrl()}/api/pedidos/webhook`,
         back_urls: {
-          success: voltarUrl,
-          failure: voltarUrl,
-          pending: voltarUrl
-        },
-        auto_return: 'approved'
+          success: confirmacaoUrl,
+          failure: confirmacaoUrl,
+          pending: confirmacaoUrl
+        }
+        // Sem auto_return: exige HTTPS no back_url, e assim evitamos depender
+        // do ngrok pra essa parte (só o webhook ainda depende dele).
       }
     });
 

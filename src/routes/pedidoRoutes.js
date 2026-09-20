@@ -21,7 +21,4 @@ router.get('/:id/sincronizar', authMiddleware, pedidoController.sincronizarPagam
 // Rota pública para receber os avisos automáticos do Mercado Pago
 router.post('/webhook', pedidoController.receberWebhook);
 
-// Ponte pública usada como back_url do Mercado Pago (ver paymentService.js)
-router.get('/:id/voltar', pedidoController.voltarParaFrontend);
-
 module.exports = router;

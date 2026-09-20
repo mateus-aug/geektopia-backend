@@ -22,17 +22,4 @@ function frontendUrl() {
   return (process.env.URL_FRONTEND || '').trim().replace(/\/$/, '');
 }
 
-// URL de back_url para um pedido específico: aponta para a "ponte" do
-// próprio backend (HTTPS via ngrok), não direto para o front.
-//
-// O Mercado Pago só redireciona sozinho (auto_return) quando o back_url é
-// HTTPS, e o front em desenvolvimento roda em localhost puro (sem HTTPS).
-// A ponte (GET /api/pedidos/:id/voltar) resolve isso: o navegador de quem
-// comprou passa por essa URL pública primeiro, e de lá é reencaminhado pro
-// endereço local da tela de confirmação — sem precisar de um segundo túnel
-// do ngrok só para o front.
-function backUrlDoPedido(idPedido) {
-  return `${baseUrl()}/api/pedidos/${idPedido}/voltar`;
-}
-
-module.exports = { client, baseUrl, frontendUrl, backUrlDoPedido };
+module.exports = { client, baseUrl, frontendUrl };
