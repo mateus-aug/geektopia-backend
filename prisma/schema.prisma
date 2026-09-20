@@ -333,6 +333,7 @@ model Lote {
   nome_lote        String?  @db.VarChar(50)
   valor_ingresso   Decimal? @db.Decimal(10, 2)
   quantidade_total Int?
+  idade_minima     Int? // idade mínima deste lote (10/12/14/16/18). Nulo = herda a classificação da edição
 
   geektopia   Geektopia     @relation(fields: [id_geektopia], references: [id_geektopia])
   itensPedido Item_Pedido[]
