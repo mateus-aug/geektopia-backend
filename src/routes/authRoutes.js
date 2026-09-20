@@ -15,7 +15,7 @@ router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.patch('/change-password', authMiddleware, authController.changePassword);
 router.delete('/delete-account', authMiddleware, authController.deleteMyAccount);
-router.post('/upload-avatar', authMiddleware, uploadMiddleware.single('avatar'), authController.uploadAvatar);
+router.post('/upload-avatar', authMiddleware, uploadMiddleware.avatar.single('avatar'), authController.uploadAvatar);
 
 // === ROTAS PAINEL ADM (Requer ser Admin) ===
 router.get('/admin/users', authMiddleware, adminMiddleware, authController.getAllUsers);

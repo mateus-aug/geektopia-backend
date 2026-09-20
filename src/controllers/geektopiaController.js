@@ -15,7 +15,8 @@ const CAMPOS_DA_LISTA = {
   data_fim: true,
   local: true,
   banner_url: true,
-  status_evento: true
+  status_evento: true,
+  tipo_edicao: true
 };
 
 // Valida os campos enviados. Só devolve o que veio no corpo, para o PUT
@@ -146,6 +147,14 @@ exports.listarTodas = async (req, res) => {
   }
 };
 
+async function rebaixarPrincipalAtual(tx) {
+  return tx.geektopia.updateMany({
+    where: { tipo_edicao: 'Principal' },
+    data: { tipo_edicao: 'Pocket' }
+  });
+}
+
+// POST /api/geektopia - cadastra uma edição nova
 // POST /api/geektopia - cadastra uma edição nova
 exports.criar = async (req, res) => {
   try {
@@ -155,8 +164,29 @@ exports.criar = async (req, res) => {
       return res.status(400).json({ error: erro });
     }
 
-    // Sem status no corpo, o schema aplica o default 'Bloqueado'.
-    const nova = await prisma.geektopia.create({ data: dados });
+    // Evento recém-criado nunca tem lote ainda — abrir vendas aqui seria
+    // sempre inválido. Mesma regra que já existe no alterarStatus.
+    if (dados.status_evento === 'VendasAbertas') {
+      return res.status(409).json({
+        error: 'Não é possível abrir as vendas na criação do evento. Cadastre os lotes de ingresso primeiro, depois abra as vendas na tela de gerenciamento.'
+      });
+    }
+
+    if (req.file) {
+      dados.banner_url = `${req.protocol}://${req.get('host')}/uploads/eventos/${req.file.filename}`;
+    }
+
+    const marcarPrincipal = req.body.tornar_principal === 'true';
+
+    let nova;
+    if (marcarPrincipal) {
+      nova = await prisma.$transaction(async (tx) => {
+        await rebaixarPrincipalAtual(tx);
+        return tx.geektopia.create({ data: { ...dados, tipo_edicao: 'Principal' } });
+      });
+    } else {
+      nova = await prisma.geektopia.create({ data: dados });
+    }
 
     return res.status(201).json({
       message: 'Edição da Geektopia cadastrada com sucesso!',
@@ -267,6 +297,44 @@ exports.alterarStatus = async (req, res) => {
   }
 };
 
+// PATCH /api/geektopia/:id/tornar-principal - marca uma edição como Principal,
+// e rebaixa automaticamente a que já era (garante só 1 Principal por vez)
+// PATCH /api/geektopia/:id/tornar-principal
+exports.tornarPrincipal = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'O identificador da edição é inválido.' });
+    }
+
+    const edicao = await prisma.geektopia.findUnique({
+      where: { id_geektopia: id },
+      select: { id_geektopia: true }
+    });
+
+    if (!edicao) {
+      return res.status(404).json({ error: 'Edição da Geektopia não encontrada.' });
+    }
+
+    const promovida = await prisma.$transaction(async (tx) => {
+      await rebaixarPrincipalAtual(tx);
+      return tx.geektopia.update({
+        where: { id_geektopia: id },
+        data: { tipo_edicao: 'Principal' }
+      });
+    });
+
+    return res.json({
+      message: `"${promovida.nome_edicao}" agora é a Geektopia principal.`,
+      geektopia: promovida
+    });
+  } catch (error) {
+    console.error('Erro ao definir edição principal:', error);
+    return res.status(500).json({ error: 'Erro ao definir a edição principal.' });
+  }
+};
+
 // DELETE /api/geektopia/:id - remove uma edição sem vínculos
 exports.remover = async (req, res) => {
   try {
@@ -315,5 +383,31 @@ exports.remover = async (req, res) => {
   } catch (error) {
     console.error('Erro ao remover edição da Geektopia:', error);
     return res.status(500).json({ error: 'Erro ao remover a edição da Geektopia.' });
+  }
+};
+
+exports.uploadBanner = async (req, res) => {
+  try {
+    const id = lerId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'O identificador da edição é inválido.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
+    }
+
+    const bannerUrl = `${req.protocol}://${req.get('host')}/uploads/eventos/${req.file.filename}`;
+
+    const atualizada = await prisma.geektopia.update({
+      where: { id_geektopia: id },
+      data: { banner_url: bannerUrl }
+    });
+
+    return res.json({ message: 'Foto do evento atualizada com sucesso!', geektopia: atualizada });
+  } catch (error) {
+    console.error('Erro ao enviar banner do evento:', error);
+    return res.status(500).json({ error: 'Erro ao enviar a foto do evento.' });
   }
 };

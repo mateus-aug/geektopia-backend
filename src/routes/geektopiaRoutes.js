@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const geektopiaController = require('../controllers/geektopiaController');
+const uploadMiddleware = require('../middlewares/uploadMiddleware');
 // A listagem de lotes fica sob este prefixo por ser rota aninhada
 // (/api/geektopia/:id/lotes), mas a lógica pertence ao loteController.
 const loteController = require('../controllers/loteController');
@@ -16,10 +17,12 @@ router.get('/admin/:id', authMiddleware, adminMiddleware, geektopiaController.bu
 router.get('/admin/:id/lotes', authMiddleware, adminMiddleware, loteController.listarPorGeektopia);
 router.get('/admin/:id/programacao', authMiddleware, adminMiddleware, programacaoController.listarPorGeektopia);
 router.get('/admin/:id/competicoes', authMiddleware, adminMiddleware, competicaoController.listarPorGeektopia);
-router.post('/', authMiddleware, adminMiddleware, geektopiaController.criar);
 router.put('/:id', authMiddleware, adminMiddleware, geektopiaController.atualizar);
 router.patch('/:id/status', authMiddleware, adminMiddleware, geektopiaController.alterarStatus);
 router.delete('/:id', authMiddleware, adminMiddleware, geektopiaController.remover);
+router.patch('/:id/tornar-principal', authMiddleware, adminMiddleware, geektopiaController.tornarPrincipal);
+router.patch('/:id/banner', authMiddleware, adminMiddleware, uploadMiddleware.eventos.single('banner'), geektopiaController.uploadBanner);
+router.post('/', authMiddleware, adminMiddleware, uploadMiddleware.eventos.single('banner'), geektopiaController.criar);
 
 // Rotas públicas: qualquer visitante acessa, sem token.
 router.get('/', geektopiaController.listarPublicas);
