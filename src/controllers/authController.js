@@ -490,12 +490,13 @@ function paraLista(contagem, total) {
 exports.relatorioDemografico = async (req, res) => {
   try {
     const usuarios = await prisma.usuario.findMany({
-      select: { data_nascimento: true, genero: true, cidade: true, estado: true }
+      select: { data_nascimento: true, genero: true, sexualidade: true, cidade: true, estado: true }
     });
 
     const total = usuarios.length;
 
     const porGenero = contarPor(usuarios, (u) => u.genero || 'Não informado');
+    const porSexualidade = contarPor(usuarios, (u) => u.sexualidade || 'Não informada');
     const porCidade = contarPor(
       usuarios,
       (u) => (u.cidade ? `${u.cidade}${u.estado ? ' - ' + u.estado : ''}` : 'Não informada')
@@ -505,6 +506,7 @@ exports.relatorioDemografico = async (req, res) => {
     return res.json({
       total_usuarios: total,
       por_genero: paraLista(porGenero, total),
+      por_sexualidade: paraLista(porSexualidade, total),
       por_cidade: paraLista(porCidade, total),
       por_faixa_etaria: paraLista(porFaixaEtaria, total)
     });
