@@ -2,7 +2,7 @@ const { Preference, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
-const { client, baseUrl } = require('../services/paymentService');
+const { client, baseUrl, frontendUrl } = require('../services/paymentService');
 
 // Monta a resposta de um pedido, convertendo os Decimal do Prisma (pedido,
 // itens e pagamento) em número comum, igual ao padrão usado no restante da API.
@@ -120,8 +120,11 @@ exports.criarPedido = async (req, res) => {
       include: { itens: true }
     });
 
-    const url = baseUrl();
-    const webhookUrl = `${url}/api/pedidos/webhook`;
+    const webhookUrl = `${baseUrl()}/api/pedidos/webhook`;
+    // As três telas de retorno vão para a mesma página de confirmação do
+    // front: ela mesma consulta o /sincronizar e mostra o status certo,
+    // então não precisa de uma tela separada para cada caso.
+    const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
 
     console.log(`📍 Webhook URL enviada ao Mercado Pago: ${webhookUrl}`);
 
@@ -133,9 +136,9 @@ exports.criarPedido = async (req, res) => {
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
         notification_url: webhookUrl,
         back_urls: {
-          success: `${url}/api/pedidos/sucesso`,
-          failure: `${url}/api/pedidos/falha`,
-          pending: `${url}/api/pedidos/pendente`
+          success: confirmacaoUrl,
+          failure: confirmacaoUrl,
+          pending: confirmacaoUrl
         },
         auto_return: 'approved'
       }

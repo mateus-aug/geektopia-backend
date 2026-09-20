@@ -8,12 +8,18 @@ const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN
 });
 
-// URL pública do backend (hoje o túnel do ngrok), usada tanto para receber o
-// webhook quanto para os back_urls de retorno do checkout. Fica aqui porque
-// as duas pontas do pagamento (criar cobrança e confirmar) precisam do mesmo
-// valor, já limpo de barra extra no final.
+// URL pública do backend (hoje o túnel do ngrok), usada para o Mercado Pago
+// (o servidor dele) chamar o webhook. Precisa ser alcançável de fora.
 function baseUrl() {
   return (process.env.URL_WEBHOOK || '').trim().replace(/\/$/, '');
 }
 
-module.exports = { client, baseUrl };
+// URL do front-end, usada só nos back_urls (a tela pra onde o comprador
+// volta depois de pagar). Quem abre esse link é o navegador de quem está
+// comprando, não o servidor do Mercado Pago — por isso não precisa do túnel,
+// o endereço local do Vite já resolve.
+function frontendUrl() {
+  return (process.env.URL_FRONTEND || '').trim().replace(/\/$/, '');
+}
+
+module.exports = { client, baseUrl, frontendUrl };
