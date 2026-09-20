@@ -10,19 +10,19 @@ const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 // Cadastro de usuário
 exports.register = async (req, res) => {
   try {
-    const { 
-      nome_completo, 
+    const {
+      nome_completo,
       cpf,
       cnpj,
       passaporte,
-      email, 
-      senha, 
-      data_nascimento, 
-      telefone, 
+      email,
+      senha,
+      data_nascimento,
+      telefone,
       estado,
-      cidade, 
-      genero, 
-      sexualidade 
+      cidade,
+      genero,
+      sexualidade
     } = req.body;
 
     // 1. Validação do Formato de E-mail
@@ -42,7 +42,36 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'Documento é obrigatório.' });
     }
 
-    // 4. Verificação de Duplicidade no Banco
+    // 4. Valida tamanho dos documentos
+    if (cpfLimpo && cpfLimpo.length !== 11) {
+      return res.status(400).json({ error: 'CPF inválido: deve conter exatamente 11 dígitos.' });
+    }
+    if (cnpjLimpo && cnpjLimpo.length !== 14) {
+      return res.status(400).json({ error: 'CNPJ inválido: deve conter exatamente 14 dígitos.' });
+    }
+
+    // 5. Valida a Data de Nascimento
+    const dataFormatada = new Date(`${data_nascimento}T12:00:00-03:00`);
+    const anoAtual = new Date().getFullYear();
+
+    if (!data_nascimento || isNaN(dataFormatada.getTime())) {
+      return res.status(400).json({ error: 'Data de nascimento inválida.' });
+    }
+    if (dataFormatada > new Date()) {
+      return res.status(400).json({ error: 'Data de nascimento não pode ser no futuro.' });
+    }
+    if (dataFormatada.getFullYear() < anoAtual - 120) {
+      return res.status(400).json({ error: 'Data de nascimento inválida: ano muito antigo.' });
+    }
+
+    // 6. Valida a senha
+    if (!senhaAtendeRequisitos(senha)) {
+      return res.status(400).json({
+        error: 'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.'
+      });
+    }
+
+    // 7. Verificação de Duplicidade no Banco
     const userExists = await prisma.usuario.findFirst({
       where: {
         OR: [
@@ -58,11 +87,10 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'E-mail ou Documento já cadastrado no sistema.' });
     }
 
-    // 5. Criptografia de Senha e Fuso Horário (UTC-3)
+    // 8. Criptografia de Senha
     const hashedPassword = await bcrypt.hash(senha, 10);
-    const dataFormatada = new Date(`${data_nascimento}T12:00:00-03:00`);
 
-    // 6. Gravação na Tabela
+    // 9. Gravação na Tabela
     const newUser = await prisma.usuario.create({
       data: {
         nome_completo,
@@ -81,12 +109,6 @@ exports.register = async (req, res) => {
     });
 
     delete newUser.senha;
-
-    if (!senhaAtendeRequisitos(senha)) {
-      return res.status(400).json({
-        error: 'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.'
-      });
-    }
 
     return res.status(201).json({ message: 'Usuário cadastrado com sucesso!', user: newUser });
   } catch (error) {
@@ -287,8 +309,11 @@ exports.getAllUsers = async (req, res) => {
         nome_completo: true,
         email: true,
         cpf: true,
+        cnpj: true,       
+        passaporte: true,
         telefone: true,
         cidade: true,
+        estado: true,
         data_cadastro: true,
         perfil: true,
         administrador: true
@@ -354,3 +379,63 @@ exports.adminDeleteUser = async (req, res) => {
   }
 };
 
+// [ADMIN] Editar dados de qualquer usuário
+exports.adminUpdateUser = async (req, res) => {
+  try {
+    const { id_usuario } = req.params;
+    const { nome_completo, telefone, cidade, estado, email } = req.body;
+
+    const targetUser = await prisma.usuario.findUnique({
+      where: { id_usuario: Number(id_usuario) }
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    if (email && email !== targetUser.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Informe um e-mail válido.' });
+      }
+      const emailEmUso = await prisma.usuario.findUnique({ where: { email } });
+      if (emailEmUso) {
+        return res.status(400).json({ error: 'Este e-mail já está em uso por outro usuário.' });
+      }
+    }
+
+    const updatedUser = await prisma.usuario.update({
+      where: { id_usuario: Number(id_usuario) },
+      data: { nome_completo, telefone, cidade, estado, email },
+      include: { administrador: true, perfil: true }
+    });
+
+    delete updatedUser.senha;
+    return res.json({ message: 'Usuário atualizado com sucesso!', user: updatedUser });
+  } catch (error) {
+    console.error('Erro ao atualizar usuário pelo painel ADM:', error);
+    return res.status(500).json({ error: 'Erro ao atualizar usuário.' });
+  }
+};
+
+// [ADMIN] Remover privilégio de Administrador (rebaixar a Cliente)
+exports.demoteAdmin = async (req, res) => {
+  try {
+    const { id_usuario } = req.params;
+
+    const admin = await prisma.administrador.findUnique({
+      where: { id_usuario: Number(id_usuario) }
+    });
+
+    if (!admin) {
+      return res.status(404).json({ error: 'Este usuário não é administrador.' });
+    }
+
+    await prisma.administrador.delete({ where: { id_usuario: Number(id_usuario) } });
+
+    return res.json({ message: 'Privilégios de administrador removidos com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao rebaixar administrador:', error);
+    return res.status(500).json({ error: 'Erro ao remover privilégios de administrador.' });
+  }
+};
