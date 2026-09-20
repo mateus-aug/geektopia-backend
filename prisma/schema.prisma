@@ -445,6 +445,8 @@ model Ingresso {
   data_checkin      DateTime?
   nome_titular      String?            @db.VarChar(255)
   documento_titular String?            @db.VarChar(50)
+  data_nascimento_titular DateTime?    @db.Date // permite validar a idade de quem vai usar o ingresso (a compra pode ser para outra pessoa)
+  idade_minima      Int? // idade exigida quando o ingresso foi emitido (congelada: mudar a classificação depois não altera o que já foi vendido)
 
   usuario     Usuario      @relation(fields: [id_usuario], references: [id_usuario])
   geektopia   Geektopia    @relation(fields: [id_geektopia], references: [id_geektopia])
