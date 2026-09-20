@@ -23,5 +23,6 @@ router.post('/admin/promote/:id_usuario', authMiddleware, adminMiddleware, authC
 router.delete('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminDeleteUser);
 router.put('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminUpdateUser);
 router.patch('/admin/demote/:id_usuario', authMiddleware, adminMiddleware, authController.demoteAdmin);
+router.get('/admin/relatorio-demografico', authMiddleware, adminMiddleware, authController.relatorioDemografico);
 
 module.exports = router;

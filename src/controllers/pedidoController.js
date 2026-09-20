@@ -121,9 +121,9 @@ exports.criarPedido = async (req, res) => {
     });
 
     const webhookUrl = `${baseUrl()}/api/pedidos/webhook`;
-    // As três telas de retorno vão para a mesma página de confirmação do
-    // front: ela mesma consulta o /sincronizar e mostra o status certo,
-    // então não precisa de uma tela separada para cada caso.
+    // As três telas de retorno vão direto para o front local. Sem
+    // auto_return (ver comentário abaixo), o Mercado Pago aceita um back_url
+    // sem HTTPS, então não depende do túnel do ngrok — só o webhook depende.
     const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
 
     console.log(`📍 Webhook URL enviada ao Mercado Pago: ${webhookUrl}`);
@@ -139,8 +139,12 @@ exports.criarPedido = async (req, res) => {
           success: confirmacaoUrl,
           failure: confirmacaoUrl,
           pending: confirmacaoUrl
-        },
-        auto_return: 'approved'
+        }
+        // Sem auto_return de propósito: essa opção do Mercado Pago exige
+        // back_url em HTTPS, o que obrigaria a manter o ngrok no ar só para
+        // isso. Sem ela, quem paga vê um botão "Voltar ao site" na tela do
+        // Mercado Pago em vez de ser redirecionado sozinho — um clique a
+        // mais, mas sem depender de mais nenhum serviço externo.
       }
     });
 

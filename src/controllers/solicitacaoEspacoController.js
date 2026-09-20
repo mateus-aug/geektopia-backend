@@ -709,8 +709,9 @@ exports.gerarPagamento = async (req, res) => {
           success: confirmacaoUrl,
           failure: confirmacaoUrl,
           pending: confirmacaoUrl
-        },
-        auto_return: 'approved'
+        }
+        // Sem auto_return: exige HTTPS no back_url, e assim evitamos depender
+        // do ngrok pra essa parte (só o webhook ainda depende dele).
       }
     });
 

@@ -439,3 +439,79 @@ exports.demoteAdmin = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao remover privilégios de administrador.' });
   }
 };
+
+// Calcula a idade em anos completos e devolve a faixa etária correspondente.
+function faixaEtaria(dataNascimento) {
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - dataNascimento.getFullYear();
+
+  const aindaNaoFezAniversarioEsteAno =
+    hoje.getMonth() < dataNascimento.getMonth() ||
+    (hoje.getMonth() === dataNascimento.getMonth() && hoje.getDate() < dataNascimento.getDate());
+
+  if (aindaNaoFezAniversarioEsteAno) idade -= 1;
+
+  if (idade < 18) return 'Menor de 18';
+  if (idade <= 24) return '18 a 24';
+  if (idade <= 34) return '25 a 34';
+  if (idade <= 44) return '35 a 44';
+  return '45 ou mais';
+}
+
+// Conta quantas vezes cada valor (calculado por `chaveDe`) aparece na lista.
+function contarPor(lista, chaveDe) {
+  const contagem = new Map();
+  for (const item of lista) {
+    const chave = chaveDe(item);
+    contagem.set(chave, (contagem.get(chave) || 0) + 1);
+  }
+  return contagem;
+}
+
+// Transforma a contagem num array ordenado (mais frequente primeiro), já com
+// o percentual calculado — é o formato que o front vai exibir direto.
+function paraLista(contagem, total) {
+  return [...contagem.entries()]
+    .map(([chave, quantidade]) => ({
+      chave,
+      quantidade,
+      percentual: total > 0 ? Math.round((quantidade / total) * 1000) / 10 : 0
+    }))
+    .sort((a, b) => b.quantidade - a.quantidade);
+}
+
+// [ADMIN] Relatório demográfico dos usuários cadastrados (cidade/estado,
+// faixa etária e gênero). Pedido pela diretoria do CCPOP para prestar contas
+// à parceria de incentivo cultural com a prefeitura.
+//
+// É intencionalmente simples: contagens e percentuais, sem gráficos — o
+// objetivo agora é ter o dado disponível, não construir um painel visual
+// completo (isso fica para uma etapa futura, se houver tempo).
+exports.relatorioDemografico = async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      select: { data_nascimento: true, genero: true, sexualidade: true, cidade: true, estado: true }
+    });
+
+    const total = usuarios.length;
+
+    const porGenero = contarPor(usuarios, (u) => u.genero || 'Não informado');
+    const porSexualidade = contarPor(usuarios, (u) => u.sexualidade || 'Não informada');
+    const porCidade = contarPor(
+      usuarios,
+      (u) => (u.cidade ? `${u.cidade}${u.estado ? ' - ' + u.estado : ''}` : 'Não informada')
+    );
+    const porFaixaEtaria = contarPor(usuarios, (u) => faixaEtaria(u.data_nascimento));
+
+    return res.json({
+      total_usuarios: total,
+      por_genero: paraLista(porGenero, total),
+      por_sexualidade: paraLista(porSexualidade, total),
+      por_cidade: paraLista(porCidade, total),
+      por_faixa_etaria: paraLista(porFaixaEtaria, total)
+    });
+  } catch (error) {
+    console.error('Erro ao gerar relatório demográfico:', error);
+    return res.status(500).json({ error: 'Erro ao gerar o relatório demográfico.' });
+  }
+};
