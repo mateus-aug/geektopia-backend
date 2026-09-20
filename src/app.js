@@ -34,6 +34,17 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Corpo da requisição grande demais.' });
   }
+  // Upload recusado pelo multer: erro do usuário (arquivo grande demais ou
+  // formato inválido), não do servidor.
+  if (err.name === 'MulterError') {
+    const mensagem = err.code === 'LIMIT_FILE_SIZE'
+      ? 'A imagem é grande demais. O limite é de 4MB.'
+      : 'Não foi possível processar o arquivo enviado.';
+    return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: mensagem });
+  }
+  if (typeof err.message === 'string' && err.message.startsWith('Formato de arquivo não suportado')) {
+    return res.status(400).json({ error: err.message });
+  }
   console.error('Erro não tratado:', err);
   return res.status(500).json({ error: 'Erro interno do servidor.' });
 });

@@ -55,6 +55,7 @@ enum StatusEventoEnum {
 enum TipoEdicaoGeektopiaEnum {
   Principal
   Pocket
+  PrincipalAnterior // ex-Principal, substituída por uma edição mais nova
 }
 
 enum NivelPermissaoAdminEnum {
@@ -162,6 +163,7 @@ model Expositor {
   tipo_expositor    String?             @db.VarChar(50)
   nome_loja_projeto String?             @db.VarChar(100)
   url_portfolio     String?             @db.Text
+  url_logo          String?             @db.Text
   status_aprovacao  StatusAprovacaoEnum @default(EmAnalise)
 
   usuario      Usuario              @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
@@ -277,17 +279,52 @@ model Geektopia {
   banner_url          String?          @db.Text
   status_evento       StatusEventoEnum @default(Bloqueado)
   tipo_edicao         TipoEdicaoGeektopiaEnum @default(Pocket)
+  classificacao_etaria Int? // classificação indicativa: 0 = livre, ou 10/12/14/16/18. Nulo = não informada
   regras_idade_minima String?          @db.Text
   aviso_documentacao  String?          @db.Text
   qnt_dias            Int?
 
+  // Conteúdo editável da vitrine pública
+  tagline        String? @db.VarChar(200)
+  texto_sobre    String? @db.Text
+  destaques      Json? // lista de { titulo, descricao }, validada no controller
+  cor_destaque   String? @db.VarChar(7) // hex, ex.: #F7C531
+
   lotes              Lote[]
+  convidados         Convidado[]
+  fotos              Foto_Edicao[]
   solicitacoesEspaco Solicitacao_Espaco[]
   feedbacks          Feedback[]
   competicoes        Competicao[]
   programacoes       Programacao[]
   ingressos          Ingresso[]
   credenciais        Credencial[]
+}
+
+model Convidado {
+  id_convidado Int     @id @default(autoincrement())
+  id_geektopia Int
+  nome         String  @db.VarChar(150)
+  titulo_papel String? @db.VarChar(100) // ex.: "Dublador", "Cosplayer convidada"
+  descricao    String? @db.Text
+  foto_url     String? @db.Text
+  ordem        Int     @default(0)
+
+  geektopia Geektopia @relation(fields: [id_geektopia], references: [id_geektopia], onDelete: Cascade)
+
+  @@index([id_geektopia, ordem])
+}
+
+model Foto_Edicao {
+  id_foto      Int     @id @default(autoincrement())
+  id_geektopia Int
+  url_foto     String  @db.Text
+  legenda      String? @db.VarChar(200)
+  ordem        Int     @default(0)
+
+  geektopia Geektopia @relation(fields: [id_geektopia], references: [id_geektopia], onDelete: Cascade)
+
+  @@index([id_geektopia, ordem])
 }
 
 model Lote {

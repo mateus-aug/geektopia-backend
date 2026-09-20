@@ -38,5 +38,8 @@ function criarUploadMiddleware(pasta) {
 
 module.exports = {
   avatar: criarUploadMiddleware('avatars'),
-  eventos: criarUploadMiddleware('eventos')
+  eventos: criarUploadMiddleware('eventos'),
+  convidados: criarUploadMiddleware('convidados'),
+  galeria: criarUploadMiddleware('galeria'),
+  logos: criarUploadMiddleware('logos')
 };

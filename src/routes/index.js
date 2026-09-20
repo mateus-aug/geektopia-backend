@@ -12,6 +12,8 @@ const pedidoRoutes = require('./pedidoRoutes'); // <-- 1. Importa as rotas de pe
 const parceiroRoutes = require('./parceiroRoutes');
 const inscricaoRoutes = require('./inscricaoRoutes');
 const ingressoRoutes = require('./ingressoRoutes');
+const convidadoRoutes = require('./convidadoRoutes');
+const fotoEdicaoRoutes = require('./fotoEdicaoRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
@@ -26,5 +28,7 @@ router.use('/pedidos', pedidoRoutes); // <-- 2. Conecta no caminho /api/pedidos 
 router.use('/parceiros', parceiroRoutes);
 router.use('/inscricoes', inscricaoRoutes);
 router.use('/ingressos', ingressoRoutes);
+router.use('/convidados', convidadoRoutes);
+router.use('/fotos-edicao', fotoEdicaoRoutes);
 
 module.exports = router;
