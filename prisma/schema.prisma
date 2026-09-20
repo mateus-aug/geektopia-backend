@@ -52,6 +52,11 @@ enum StatusEventoEnum {
   Encerrado
 }
 
+enum TipoEdicaoGeektopiaEnum {
+  Principal
+  Pocket
+}
+
 enum NivelPermissaoAdminEnum {
   ADMIN_GERAL
   ADMIN_CONTEUDO
@@ -84,7 +89,7 @@ enum TipoCredencialEnum {
 model Usuario {
   id_usuario      Int      @id @default(autoincrement())
   id_responsavel  Int? // Opcional: Apenas menores de idade
-  nome_completo   String   @db.VarChar(100)
+  nome_completo   String   @db.VarChar(150)
   cpf             String?  @unique @db.VarChar(11)
   cnpj            String?  @unique @db.VarChar(14)
   passaporte      String?  @unique @db.VarChar(20)
@@ -95,7 +100,7 @@ model Usuario {
   genero          String?  @db.VarChar(50)
   sexualidade     String?  @db.VarChar(50)
   estado          String?  @db.VarChar(2)   
-  cidade          String?  @db.VarChar(30)
+  cidade          String?  @db.VarChar(100)
   data_cadastro   DateTime @default(now())
 
   // Relacionamentos
@@ -271,6 +276,7 @@ model Geektopia {
   descricao           String?          @db.Text
   banner_url          String?          @db.Text
   status_evento       StatusEventoEnum @default(Bloqueado)
+  tipo_edicao         TipoEdicaoGeektopiaEnum @default(Pocket)
   regras_idade_minima String?          @db.Text
   aviso_documentacao  String?          @db.Text
   qnt_dias            Int?
