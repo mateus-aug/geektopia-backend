@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
+const { urlDoUpload, apagarArquivoLocal, descartarUpload } = require('../utils/arquivos');
 
 // Perfis de parceiro do evento. O cadastro (authController) cria só o
 // Usuario; é aqui que o usuário logado assume um papel a mais:
@@ -133,7 +134,7 @@ exports.criarExpositor = async (req, res) => {
     });
 
     return res.status(201).json({
-      message: 'Perfil de expositor criado! Aguarde a análise da diretoria.',
+      message: 'Perfil de expositor criado! Agora você já pode solicitar um espaço.',
       expositor: novo
     });
   } catch (error) {
@@ -413,5 +414,39 @@ exports.listarCompetidores = async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar competidores:', error);
     return res.status(500).json({ error: 'Erro ao listar os competidores.' });
+  }
+};
+
+// PATCH /api/parceiros/expositor/logo (multipart: logo)
+// Logo do próprio expositor, exibida no carrossel de expositores confirmados.
+// Substitui a anterior; o dono vem do token, nunca do corpo.
+exports.uploadLogoExpositor = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Envie a imagem no campo "logo".' });
+    }
+
+    const atual = await prisma.expositor.findUnique({
+      where: { id_usuario: req.userId },
+      select: { url_logo: true }
+    });
+
+    if (!atual) {
+      descartarUpload(req);
+      return res.status(404).json({ error: 'Você ainda não possui perfil de expositor.' });
+    }
+
+    const expositor = await prisma.expositor.update({
+      where: { id_usuario: req.userId },
+      data: { url_logo: urlDoUpload(req, 'logos', req.file) }
+    });
+
+    apagarArquivoLocal(atual.url_logo);
+
+    return res.json({ message: 'Logo atualizada com sucesso!', url_logo: expositor.url_logo });
+  } catch (error) {
+    descartarUpload(req);
+    console.error('Erro ao enviar logo do expositor:', error);
+    return res.status(500).json({ error: 'Erro ao enviar a logo.' });
   }
 };

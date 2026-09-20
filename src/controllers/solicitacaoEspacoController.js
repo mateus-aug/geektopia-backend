@@ -82,7 +82,10 @@ const INCLUIR = {
       qtd_credenciais_inclusas: true
     }
   },
-  geektopia: { select: { id_geektopia: true, nome_edicao: true, status_evento: true } }
+  geektopia: { select: { id_geektopia: true, nome_edicao: true, status_evento: true } },
+  // Situação da taxa: só vira "confirmado" no site quando o pedido está Pago.
+  pedido: { select: { id_pedido: true, status_pedido: true } },
+  _count: { select: { ajudantes: true } }
 };
 
 // POST /api/solicitacoes-espaco - o expositor se candidata a um espaço
@@ -97,12 +100,18 @@ exports.criar = async (req, res) => {
 
     const expositor = await prisma.expositor.findUnique({
       where: { id_usuario: idUsuario },
-      select: { id_usuario: true }
+      select: { id_usuario: true, status_aprovacao: true }
     });
 
     if (!expositor) {
       return res.status(403).json({
         error: 'Apenas usuários com perfil de expositor podem solicitar espaço.'
+      });
+    }
+
+    if (expositor.status_aprovacao === 'Reprovado') {
+      return res.status(403).json({
+        error: 'O seu perfil de expositor não foi aprovado pela diretoria. Entre em contato com a organização.'
       });
     }
 
@@ -665,30 +674,64 @@ exports.gerarPagamento = async (req, res) => {
       });
     }
 
-    // Já existe uma cobrança (paga ou pendente) para não duplicar. Quem quiser
-    // saber o status consulta o pedido diretamente.
-    if (solicitacao.id_pedido !== null) {
-      return res.status(409).json({
-        error: 'Esta solicitação já tem uma cobrança gerada.',
-        id_pedido: solicitacao.id_pedido
-      });
-    }
-
     const valor = Number(solicitacao.valor_total_final);
 
     if (!Number.isFinite(valor) || valor <= 0) {
       return res.status(409).json({ error: 'Esta solicitação não tem um valor definido para cobrança.' });
     }
 
-    const novoPedido = await prisma.pedido.create({
-      data: {
-        id_usuario: req.userId,
-        valor_total_bruto: valor,
-        status_pedido: 'Pendente',
-        pagamento: { create: { valor_total: valor, status_pagamento: 'Pendente' } },
-        solicitacoesEspaco: { connect: { id_solicitacao: id } }
+    // Um pedido por solicitação. Se já existe e ainda está pendente, o expositor
+    // está RETOMANDO o pagamento (perdeu a aba do Mercado Pago, o link expirou):
+    // reaproveitamos o pedido e geramos uma nova preferência de pagamento para ele.
+    let novoPedido;
+
+    if (solicitacao.id_pedido !== null) {
+      novoPedido = await prisma.pedido.findUnique({ where: { id_pedido: solicitacao.id_pedido } });
+
+      if (novoPedido.status_pedido === 'Pago') {
+        return res.status(409).json({
+          error: 'A taxa desta solicitação já foi paga.',
+          id_pedido: novoPedido.id_pedido
+        });
       }
-    });
+
+      if (novoPedido.status_pedido !== 'Pendente') {
+        return res.status(409).json({
+          error: 'A cobrança anterior desta solicitação foi encerrada. Entre em contato com a organização.',
+          id_pedido: novoPedido.id_pedido
+        });
+      }
+    } else {
+      // Duas requisições simultâneas (duplo clique) não podem criar dois pedidos:
+      // o vínculo só é gravado se a solicitação ainda estiver sem pedido.
+      novoPedido = await prisma.$transaction(async (tx) => {
+        const criado = await tx.pedido.create({
+          data: {
+            id_usuario: req.userId,
+            valor_total_bruto: valor,
+            status_pedido: 'Pendente',
+            pagamento: { create: { valor_total: valor, status_pagamento: 'Pendente' } }
+          }
+        });
+
+        const vinculo = await tx.solicitacao_Espaco.updateMany({
+          where: { id_solicitacao: id, id_pedido: null },
+          data: { id_pedido: criado.id_pedido }
+        });
+
+        if (vinculo.count === 0) {
+          throw new Error('COBRANCA_JA_GERADA'); // desfaz o pedido recém-criado
+        }
+        return criado;
+      }).catch((e) => {
+        if (e.message === 'COBRANCA_JA_GERADA') return null;
+        throw e;
+      });
+
+      if (!novoPedido) {
+        return res.status(409).json({ error: 'Esta solicitação já tem uma cobrança em andamento. Atualize a página.' });
+      }
+    }
 
     const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
 
@@ -716,7 +759,7 @@ exports.gerarPagamento = async (req, res) => {
     });
 
     return res.status(201).json({
-      message: 'Cobrança gerada com sucesso!',
+      message: solicitacao.id_pedido !== null ? 'Pagamento retomado.' : 'Cobrança gerada com sucesso!',
       id_pedido: novoPedido.id_pedido,
       init_point: result.init_point
     });
