@@ -3,6 +3,7 @@ const router = express.Router();
 const perfilParceiroController = require('../controllers/perfilParceiroController');
 const authMiddleware = require('../middlewares/authMiddleware');
 const adminMiddleware = require('../middlewares/adminMiddleware');
+const uploadMiddleware = require('../middlewares/uploadMiddleware');
 
 // TODAS as rotas exigem login: perfil de parceiro é sempre de quem está
 // autenticado. O controller lê o dono pelo req.userId do token.
@@ -17,6 +18,7 @@ router.get('/admin/competidores', authMiddleware, adminMiddleware, perfilParceir
 router.get('/meu-perfil', authMiddleware, perfilParceiroController.meuPerfil);
 router.post('/expositor', authMiddleware, perfilParceiroController.criarExpositor);
 router.put('/expositor', authMiddleware, perfilParceiroController.atualizarExpositor);
+router.patch('/expositor/logo', authMiddleware, uploadMiddleware.logos.single('logo'), perfilParceiroController.uploadLogoExpositor);
 router.post('/competidor', authMiddleware, perfilParceiroController.criarCompetidor);
 router.put('/competidor', authMiddleware, perfilParceiroController.atualizarCompetidor);
 

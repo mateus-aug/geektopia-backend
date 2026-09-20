@@ -14,11 +14,12 @@ const VALOR_MAXIMO = 100000000;
 // que não vira número comum no JSON. A conversão para Number é segura aqui:
 // preços de ingresso ficam muito abaixo do limite de precisão do float.
 //
-// ATENÇÃO sobre `quantidade_total`: pelo Quadro 50 do PDF, a trigger
-// `tg_baixar_estoque_apos_venda` DECREMENTA essa coluna a cada venda, ou seja,
-// ela guarda o estoque RESTANTE. Como as triggers ainda não foram criadas, o
-// valor não diminui sozinho. Por isso NÃO calculamos "total - vendidos" aqui:
-// isso contaria a mesma venda duas vezes quando as triggers entrarem no ar.
+// `quantidade_total` é a CAPACIDADE do lote e não diminui a cada venda (a
+// trigger de baixa de estoque do Quadro 50 não existe). O que já foi vendido
+// se conta pelos ingressos emitidos, do mesmo jeito que o pedidoController faz
+// na hora de recusar uma compra acima do estoque. Quando a consulta traz o
+// _count, `esgotado` e `restantes` seguem essa mesma conta; sem ele (criação e
+// edição), só dá para saber se a capacidade é zero.
 function montarResposta(lote) {
   const { _count, ...campos } = lote;
 
@@ -30,6 +31,11 @@ function montarResposta(lote) {
 
   if (_count) {
     resposta.ingressos_emitidos = _count.ingressos;
+
+    if (lote.quantidade_total !== null) {
+      resposta.restantes = Math.max(lote.quantidade_total - _count.ingressos, 0);
+      resposta.esgotado = resposta.restantes === 0;
+    }
   }
 
   return resposta;
@@ -109,6 +115,7 @@ exports.listarPorGeektopia = async (req, res) => {
 
     const lotes = await prisma.lote.findMany({
       where: { id_geektopia: idGeektopia },
+      include: { _count: { select: { ingressos: true } } },
       orderBy: { valor_ingresso: 'asc' }
     });
 

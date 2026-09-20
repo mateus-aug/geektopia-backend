@@ -308,7 +308,10 @@ exports.buscarPorId = async (req, res) => {
       where: { id_pedido: id },
       include: {
         itens: { include: { lote: { select: { nome_lote: true } } } },
-        pagamento: true
+        pagamento: true,
+        // Pedido de ingresso tem itens; o de taxa de espaço ou de inscrição não.
+        // Estas contagens dizem a que o pedido se refere.
+        _count: { select: { solicitacoesEspaco: true, inscricoesCompeticao: true } }
       }
     });
 

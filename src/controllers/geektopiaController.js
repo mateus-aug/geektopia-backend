@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { Prisma } = require('@prisma/client');
 const { lerId, lerData, lerTexto } = require('../utils/validadores');
 
 // Status que o público pode enxergar. 'Bloqueado' é rascunho da diretoria.
@@ -16,8 +17,41 @@ const CAMPOS_DA_LISTA = {
   local: true,
   banner_url: true,
   status_evento: true,
-  tipo_edicao: true
+  tipo_edicao: true,
+  tagline: true,
+  cor_destaque: true,
+  classificacao_etaria: true
 };
+
+const COR_HEX = /^#[0-9a-fA-F]{6}$/;
+
+// Classificação indicativa brasileira: 0 = livre. Mesmos valores do CHECK do banco.
+const CLASSIFICACOES = [0, 10, 12, 14, 16, 18];
+const MAX_DESTAQUES = 6;
+
+// Valida a lista de destaques: [{ titulo, descricao }]. O JSON vai direto
+// para a vitrine pública, então o formato é conferido item a item.
+function validarDestaques(valor) {
+  if (valor === null) return { valor: null };
+
+  if (!Array.isArray(valor) || valor.length > MAX_DESTAQUES) {
+    return { erro: `O campo "destaques" deve ser uma lista com até ${MAX_DESTAQUES} itens.` };
+  }
+
+  const itens = [];
+  for (const item of valor) {
+    const titulo = lerTexto(item && item.titulo, 80);
+    if (!titulo) {
+      return { erro: 'Cada destaque precisa de um "titulo" com até 80 caracteres.' };
+    }
+    const descricao = item.descricao === undefined || item.descricao === '' ? null : lerTexto(item.descricao, 300);
+    if (item.descricao && !descricao) {
+      return { erro: 'A "descricao" de um destaque deve ter até 300 caracteres.' };
+    }
+    itens.push({ titulo, descricao });
+  }
+  return { valor: itens };
+}
 
 // Valida os campos enviados. Só devolve o que veio no corpo, para o PUT
 // conseguir alterar um campo sem apagar os outros.
@@ -65,6 +99,48 @@ function validarDados(corpo, ehCriacao) {
   }
   if (corpo.aviso_documentacao !== undefined) {
     dados.aviso_documentacao = lerTexto(corpo.aviso_documentacao, 2000);
+  }
+
+  // Vem como número (JSON) ou texto (multipart). Vazio/null limpa: "não informada".
+  if (corpo.classificacao_etaria !== undefined) {
+    if (corpo.classificacao_etaria === null || corpo.classificacao_etaria === '') {
+      dados.classificacao_etaria = null;
+    } else {
+      const faixa = Number(corpo.classificacao_etaria);
+      if (!CLASSIFICACOES.includes(faixa)) {
+        return { erro: `O campo "classificacao_etaria" deve ser um destes: ${CLASSIFICACOES.join(', ')} (0 = livre).` };
+      }
+      dados.classificacao_etaria = faixa;
+    }
+  }
+
+  // Conteúdo da vitrine. Texto vazio ou null limpa o campo; passar do limite
+  // é erro (não some em silêncio).
+  for (const [campo, limite] of [['tagline', 200], ['texto_sobre', 10000]]) {
+    if (corpo[campo] !== undefined) {
+      const texto = typeof corpo[campo] === 'string' ? corpo[campo].trim() : '';
+      if (texto.length > limite) {
+        return { erro: `O campo "${campo}" deve ter no máximo ${limite} caracteres.` };
+      }
+      dados[campo] = texto === '' ? null : texto;
+    }
+  }
+
+  if (corpo.cor_destaque !== undefined) {
+    if (corpo.cor_destaque === null || corpo.cor_destaque === '') {
+      dados.cor_destaque = null;
+    } else if (typeof corpo.cor_destaque !== 'string' || !COR_HEX.test(corpo.cor_destaque)) {
+      return { erro: 'O campo "cor_destaque" deve ser uma cor hexadecimal (ex.: #F7C531).' };
+    } else {
+      dados.cor_destaque = corpo.cor_destaque.toUpperCase();
+    }
+  }
+
+  if (corpo.destaques !== undefined) {
+    const r = validarDestaques(corpo.destaques);
+    if (r.erro) return { erro: r.erro };
+    // Json nulo no Prisma exige um valor especial, não o null comum.
+    dados.destaques = r.valor === null ? Prisma.DbNull : r.valor;
   }
 
   if (corpo.status_evento !== undefined) {
@@ -147,10 +223,13 @@ exports.listarTodas = async (req, res) => {
   }
 };
 
+// O Principal que perde o posto vira 'PrincipalAnterior' (edição passada do
+// evento anual), não Pocket: assim ele não se mistura às edições menores.
+// Continua totalmente editável pelo admin (programação, fotos, convidados...).
 async function rebaixarPrincipalAtual(tx) {
   return tx.geektopia.updateMany({
     where: { tipo_edicao: 'Principal' },
-    data: { tipo_edicao: 'Pocket' }
+    data: { tipo_edicao: 'PrincipalAnterior' }
   });
 }
 
