@@ -98,6 +98,8 @@ async function limparZZ() {
   await prisma.espaco.deleteMany({ where: { id_geektopia: { in: eds } } });
   await prisma.lote.deleteMany({ where: { id_geektopia: { in: eds } } });
   await prisma.geektopia.deleteMany({ where: { id_geektopia: { in: eds } } });
+  await prisma.evento_Externo.deleteMany({ where: { id_organizador: { in: us } } });
+  await prisma.organizador_Externo.deleteMany({ where: { id_usuario: { in: us } } });
   await prisma.expositor.deleteMany({ where: { id_usuario: { in: us } } });
   await prisma.competidor.deleteMany({ where: { id_usuario: { in: us } } });
   await prisma.participante.deleteMany({ where: { id_usuario: { in: us } } });

@@ -1,5 +1,5 @@
 const prisma = require('../config/prisma');
-const { lerId, lerTexto } = require('../utils/validadores');
+const { lerId, lerTexto, lerLink } = require('../utils/validadores');
 const { urlDoUpload, apagarArquivoLocal, descartarUpload } = require('../utils/arquivos');
 
 // Perfis de parceiro do evento. O cadastro (authController) cria só o
@@ -99,8 +99,13 @@ function validarExpositor(corpo, ehCriacao) {
     }
   }
 
-  if (corpo.url_portfolio !== undefined) {
-    dados.url_portfolio = corpo.url_portfolio === null ? null : lerTexto(corpo.url_portfolio, 2000);
+  // O portfólio (Instagram, Drive, site) é o que a organização usa para avaliar o expositor: é obrigatório.
+  if (ehCriacao || corpo.url_portfolio !== undefined) {
+    const link = lerLink(corpo.url_portfolio, 2000);
+    if (!link) {
+      return { erro: 'Informe o link do seu portfólio ou rede social (Instagram, Drive, site...), começando com http:// ou https://.' };
+    }
+    dados.url_portfolio = link;
   }
 
   return { dados };

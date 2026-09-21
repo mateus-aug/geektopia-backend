@@ -27,4 +27,16 @@ function lerTexto(valor, limite) {
   return limpo.length === 0 || limpo.length > limite ? null : limpo;
 }
 
-module.exports = { lerId, lerData, lerTexto };
+// Link web: devolve a URL só se for http(s) e tiver até `limite` caracteres. Bloqueia javascript:, data: etc.
+function lerLink(valor, limite = 2000) {
+  const texto = lerTexto(valor, limite);
+  if (!texto) return null;
+  try {
+    const u = new URL(texto);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { lerId, lerData, lerTexto, lerLink };

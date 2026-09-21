@@ -1,5 +1,6 @@
 // COMPETIÇÃO: inscrição sempre em análise, equipe, motivo da reprovação e taxa só depois da aprovação.
 const test = require('node:test');
+const LINK = 'https://instagram.com/zz';
 const assert = require('node:assert/strict');
 const { mp, prisma, iniciarServidor, cabecalho, criarUsuario, limparZZ, pagamentoAprovado } = require('./helpers/ambiente');
 
@@ -17,17 +18,17 @@ test('fluxo completo da inscrição, equipe e cobrança da taxa', async () => {
   const solo = await mk('ZZ Solo', 'Solo', 0); const dupla = await mk('ZZ Dupla', 'Dupla', 30); const grupo = await mk('ZZ Grupo', 'Grupo', null);
   const { u, H } = await criarUsuario('comp1');
 
-  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: solo.id_competicao })).s, 403, 'sem perfil de competidor');
+  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: solo.id_competicao, url_portfolio_apresentacao: LINK })).s, 403, 'sem perfil de competidor');
   assert.equal((await c('POST', '/parceiros/competidor', H, { nickname_competidor: 'zzcomp' })).s, 201);
 
-  const iSolo = await c('POST', '/inscricoes', H, { id_competicao: solo.id_competicao });
+  const iSolo = await c('POST', '/inscricoes', H, { id_competicao: solo.id_competicao, url_portfolio_apresentacao: LINK });
   assert.equal(iSolo.s, 201);
   assert.equal(iSolo.b.inscricao.status_inscricao, 'EmAnalise');
 
   assert.equal((await c('POST', '/inscricoes', H, { id_competicao: dupla.id_competicao })).s, 400, 'dupla sem equipe');
-  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: dupla.id_competicao, equipe: { nome_equipe: 'T', integrantes: 'Ana Souza\nBeto Lima' } })).s, 400, 'dupla com 2 parceiros');
-  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: grupo.id_competicao, equipe: { nome_equipe: 'G', integrantes: 'Ana Souza' } })).s, 400, 'grupo com 1 integrante');
-  const iDupla = await c('POST', '/inscricoes', H, { id_competicao: dupla.id_competicao, equipe: { nome_equipe: 'Time ZZ', integrantes: 'Ana Souza' } });
+  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: dupla.id_competicao, url_portfolio_apresentacao: LINK, equipe: { nome_equipe: 'T', integrantes: 'Ana Souza\nBeto Lima' } })).s, 400, 'dupla com 2 parceiros');
+  assert.equal((await c('POST', '/inscricoes', H, { id_competicao: grupo.id_competicao, url_portfolio_apresentacao: LINK, equipe: { nome_equipe: 'G', integrantes: 'Ana Souza' } })).s, 400, 'grupo com 1 integrante');
+  const iDupla = await c('POST', '/inscricoes', H, { id_competicao: dupla.id_competicao, url_portfolio_apresentacao: LINK, equipe: { nome_equipe: 'Time ZZ', integrantes: 'Ana Souza' } });
   assert.equal(iDupla.s, 201);
   const id = iDupla.b.inscricao.id_inscricao;
 

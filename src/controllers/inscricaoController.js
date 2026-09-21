@@ -1,6 +1,6 @@
 const prisma = require('../config/prisma');
 const { notificar, notificarAdmins } = require('../services/notificacoes');
-const { lerId, lerTexto } = require('../utils/validadores');
+const { lerId, lerTexto, lerLink } = require('../utils/validadores');
 const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
 
 // Inscrição de competidores nas competições da GEEKTOPIA.
@@ -86,20 +86,25 @@ function montarResposta(i) {
 }
 
 // Valida os links opcionais de apresentação. Só devolve o que veio no corpo.
-function validarLinks(corpo) {
+function validarLinks(corpo, exigirPortfolio = false) {
   const dados = {};
 
   for (const campo of ['url_portfolio_apresentacao', 'link_audio_apresentacao']) {
     if (corpo[campo] === undefined) continue;
-    if (corpo[campo] === null) {
+    if (corpo[campo] === null && campo !== 'url_portfolio_apresentacao') {
       dados[campo] = null;
       continue;
     }
-    const valor = lerTexto(corpo[campo], 2000);
+    const valor = lerLink(corpo[campo], 2000);
     if (valor === null) {
-      return { erro: `O campo "${campo}" deve ser um texto de até 2000 caracteres.` };
+      return { erro: `O campo "${campo}" deve ser um link começando com http:// ou https://.` };
     }
     dados[campo] = valor;
+  }
+
+  // O material de apresentação (Instagram, Drive, YouTube...) é o que a organização avalia: sem ele não há inscrição.
+  if (exigirPortfolio && !dados.url_portfolio_apresentacao) {
+    return { erro: 'Informe o link do seu material de apresentação (portfólio, Instagram, Drive ou vídeo). Sem ele a organização não consegue avaliar a inscrição.' };
   }
 
   return { dados };
@@ -223,7 +228,7 @@ exports.criar = async (req, res) => {
       if (equipeExistente.erro) return res.status(400).json({ error: equipeExistente.erro });
     }
 
-    const { erro, dados } = validarLinks(req.body);
+    const { erro, dados } = validarLinks(req.body, true);
 
     if (erro) {
       return res.status(400).json({ error: erro });
