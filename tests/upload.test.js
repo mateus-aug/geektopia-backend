@@ -64,9 +64,9 @@ test('arquivo que não é imagem é recusado, mesmo dizendo ser PNG', async () =
   assert.equal(semLogin.status, 401, 'sem login não sobe arquivo');
 });
 
-test('arquivo acima de 4 MB é recusado', async () => {
+test('arquivo acima de 15 MB é recusado', async () => {
   const { H } = await criarUsuario('up4');
-  const grande = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(5 * 1024 * 1024, 1)]);
+  const grande = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16 * 1024 * 1024, 1)]);
   const r = await enviar(H, 'avatar', grande);
   assert.equal(r.s, 413);
 });
