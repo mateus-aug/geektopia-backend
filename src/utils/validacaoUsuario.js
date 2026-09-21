@@ -228,4 +228,7 @@ async function buscarConflito(prisma, dados, ignorarId = null) {
   return null;
 }
 
-module.exports = { validarUsuario, buscarConflito, NIVEIS_ADMIN, UFS, IDADE_MINIMA_CADASTRO };
+module.exports = {
+  validarUsuario, buscarConflito, NIVEIS_ADMIN, UFS, IDADE_MINIMA_CADASTRO,
+  cpfComDigitosValidos, exigirDigitoVerificador, idadeEmAnos
+};

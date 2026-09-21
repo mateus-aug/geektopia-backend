@@ -2,6 +2,7 @@ const { Preference, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
+const { MAX_INGRESSOS_POR_PEDIDO, validarTitular, idadeExigida, limiteDoLote } = require('../utils/titulares');
 const { client, baseUrl, frontendUrl } = require('../services/paymentService');
 
 // Monta a resposta de um pedido, convertendo os Decimal do Prisma (pedido,
@@ -45,13 +46,20 @@ exports.criarPedido = async (req, res) => {
     const lotes = await prisma.lote.findMany({
       where: { id_lote: { in: idsLote } },
       include: {
-        geektopia: { select: { status_evento: true } },
+        geektopia: { select: { status_evento: true, classificacao_etaria: true } },
         _count: { select: { ingressos: true } }
       }
     });
     const lotesPorId = new Map(lotes.map((lote) => [lote.id_lote, lote]));
 
+    // Limite de ingressos por compra (evita cambismo e erro de digitação).
+    const totalNoPedido = itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0);
+    if (totalNoPedido > MAX_INGRESSOS_POR_PEDIDO) {
+      return res.status(400).json({ error: `Cada compra pode ter no máximo ${MAX_INGRESSOS_POR_PEDIDO} ingressos.` });
+    }
+
     let valorTotal = 0;
+    const documentosPorLote = new Map(); // id_lote -> { documento: quantidade } dentro deste pedido
     const itensParaCriar = [];
     const itensParaPreferencia = [];
 
@@ -85,6 +93,46 @@ exports.criarPedido = async (req, res) => {
         }
       }
 
+      // Cada ingresso sai em nome de um titular (nome, documento e nascimento).
+      if (!Array.isArray(item.titulares) || item.titulares.length !== quantidade) {
+        return res.status(400).json({ error: `Informe os dados dos ${quantidade} titular(es) do lote "${lote.nome_lote}".` });
+      }
+
+      const idadeMin = idadeExigida(lote, lote.geektopia);
+      const limite = limiteDoLote(lote);
+      const contagem = documentosPorLote.get(idLote) || {};
+      const titularesValidos = [];
+
+      for (let i = 0; i < item.titulares.length; i += 1) {
+        const r = validarTitular(item.titulares[i], i + 1);
+        if (r.erro) return res.status(400).json({ error: `${lote.nome_lote} — ${r.erro}`, campo: 'titulares' });
+        const t = r.valor;
+
+        if (idadeMin && t.idade < idadeMin) {
+          return res.status(400).json({
+            error: `${t.nome_completo} tem ${t.idade} anos, e o ingresso "${lote.nome_lote}" exige ${idadeMin}+ anos.`,
+            campo: 'titulares'
+          });
+        }
+
+        contagem[t.documento] = (contagem[t.documento] || 0) + 1;
+        if (limite) {
+          const jaTem = await prisma.ingresso.count({
+            where: { id_lote: idLote, documento_titular: t.documento, status_ingresso: { not: 'Cancelado' } }
+          });
+          if (jaTem + contagem[t.documento] > limite) {
+            return res.status(409).json({
+              error: `O ingresso "${lote.nome_lote}" é limitado a ${limite} por pessoa (documento ${t.documento}).`,
+              campo: 'titulares'
+            });
+          }
+        }
+
+        const { idade, ...guardar } = t;
+        titularesValidos.push(guardar);
+      }
+      documentosPorLote.set(idLote, contagem);
+
       const precoUnitario = Number(lote.valor_ingresso);
       const subtotal = precoUnitario * quantidade;
       valorTotal += subtotal;
@@ -93,7 +141,8 @@ exports.criarPedido = async (req, res) => {
         id_lote: idLote,
         quantidade,
         preco_unitario_momento: precoUnitario,
-        subtotal
+        subtotal,
+        titulares: titularesValidos
       });
 
       itensParaPreferencia.push({
@@ -231,13 +280,19 @@ async function aplicarPagamentoAprovado(idPedidoBanco, pagamentoInfo) {
   // GERAR OS INGRESSOS AUTOMATICAMENTE NA TABELA INGRESSO
   for (const item of pedidoAtualizado.itens) {
     if (item.id_lote) {
-      // Busca o lote no banco para identificar o evento (id_geektopia) correto
+      // Busca o lote (e a classificação da edição) para gravar a idade exigida no ingresso.
       const loteDoBanco = await prisma.lote.findUnique({
-        where: { id_lote: item.id_lote }
+        where: { id_lote: item.id_lote },
+        include: { geektopia: { select: { classificacao_etaria: true } } }
       });
 
       if (loteDoBanco) {
+        const titulares = Array.isArray(item.titulares) ? item.titulares : [];
+        // Congelada na emissão: mudar a classificação depois não altera o que já foi vendido.
+        const idadeMinima = idadeExigida(loteDoBanco, loteDoBanco.geektopia);
+
         for (let i = 0; i < item.quantidade; i++) {
+          const titular = titulares[i];
           await prisma.ingresso.create({
             data: {
               id_usuario: pedidoAtualizado.id_usuario,
@@ -245,7 +300,13 @@ async function aplicarPagamentoAprovado(idPedidoBanco, pagamentoInfo) {
               id_lote: item.id_lote,
               id_item: item.id_item,
               codigo_qr: `GT-${crypto.randomUUID()}`,
-              status_ingresso: 'Valido'
+              status_ingresso: 'Valido',
+              ...(titular && {
+                nome_titular: titular.nome_completo,
+                documento_titular: titular.documento,
+                data_nascimento_titular: new Date(`${titular.data_nascimento}T00:00:00Z`)
+              }),
+              idade_minima: idadeMinima
             }
           });
         }
