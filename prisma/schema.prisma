@@ -400,6 +400,7 @@ model Competicao {
   nome_competicao      String?                   @db.VarChar(100)
   modalidade           ModalidadeCompeticaoEnum?
   valor_taxa_inscricao Decimal?                  @db.Decimal(10, 2)
+  descricao            String?                   @db.Text // o que é a competição, como funciona, premiação...
   regras_url           String?                   @db.Text
 
   geektopia    Geektopia              @relation(fields: [id_geektopia], references: [id_geektopia])
