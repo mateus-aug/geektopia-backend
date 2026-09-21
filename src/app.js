@@ -58,7 +58,7 @@ app.use((err, req, res, next) => {
   // formato inválido), não do servidor.
   if (err.name === 'MulterError') {
     const mensagem = err.code === 'LIMIT_FILE_SIZE'
-      ? 'A imagem é grande demais. O limite é de 4MB.'
+      ? 'A imagem é grande demais. O limite é de 15MB.'
       : 'Não foi possível processar o arquivo enviado.';
     return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: mensagem });
   }

@@ -8,7 +8,7 @@ const { salvarImagem } = require('../services/armazenamento');
 // Os controllers já chamam `descartarUpload(req)` quando recusam a requisição depois do upload.
 
 const TIPOS = ['image/jpeg', 'image/png', 'image/webp'];
-const LIMITE = 4 * 1024 * 1024; // 4MB de entrada; o que fica guardado é bem menor (WebP redimensionado)
+const LIMITE = 15 * 1024 * 1024; // 15MB de entrada (foto de celular); o que fica guardado é bem menor (WebP redimensionado)
 
 // Confere pelo CONTEÚDO (bytes iniciais), não só pelo tipo que o navegador declarou.
 function pareceImagem(b) {
