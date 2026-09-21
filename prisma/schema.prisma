@@ -244,6 +244,7 @@ model Item_Pedido {
   quantidade             Int?
   preco_unitario_momento Decimal? @db.Decimal(10, 2)
   subtotal               Decimal? @db.Decimal(10, 2)
+  titulares              Json? // dados de quem vai usar cada ingresso: [{ nome, documento, data_nascimento }]
 
   pedido    Pedido     @relation(fields: [id_pedido], references: [id_pedido])
   lote      Lote?      @relation(fields: [id_lote], references: [id_lote])
@@ -339,13 +340,14 @@ model Foto_Edicao {
 }
 
 model Lote {
-  id_lote          Int                   @id @default(autoincrement())
-  id_geektopia     Int // Obrigatório: Todo lote pertence a um evento
-  nome_lote        String?               @db.VarChar(50)
-  valor_ingresso   Decimal?              @db.Decimal(10, 2)
-  quantidade_total Int?
-  categoria        CategoriaIngressoEnum @default(Inteira) // agrupa os lotes na página do evento
-  idade_minima     Int? // idade mínima deste lote (10/12/14/16/18). Nulo = herda a classificação da edição
+  id_lote           Int                   @id @default(autoincrement())
+  id_geektopia      Int // Obrigatório: Todo lote pertence a um evento
+  nome_lote         String?               @db.VarChar(50)
+  valor_ingresso    Decimal?              @db.Decimal(10, 2)
+  quantidade_total  Int?
+  categoria         CategoriaIngressoEnum @default(Inteira) // agrupa os lotes na página do evento
+  idade_minima      Int? // idade mínima deste lote (10/12/14/16/18). Nulo = herda a classificação da edição
+  limite_por_pessoa Int? // máximo de ingressos deste lote por pessoa (documento). Nulo = sem limite (meia-entrada usa 1 por padrão)
 
   geektopia   Geektopia     @relation(fields: [id_geektopia], references: [id_geektopia])
   itensPedido Item_Pedido[]
@@ -492,6 +494,13 @@ model Inscricao_Competicao {
 }
 
 // ---------------- INSTITUCIONAL / SITE ----------------
+
+// Textos editáveis pelo admin das páginas informativas (hoje só a landing page: chave "landing").
+model Conteudo_Site {
+  chave         String   @id @db.VarChar(60)
+  valor         Json
+  atualizado_em DateTime @default(now())
+}
 
 model Historia_Institucional {
   id_historia    Int     @id @default(autoincrement())

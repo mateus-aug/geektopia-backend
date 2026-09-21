@@ -11,6 +11,9 @@ router.patch('/checkin', authMiddleware, adminMiddleware, ingressoController.che
 
 // Do participante.
 router.get('/meus', authMiddleware, ingressoController.listarMeus);
+router.get('/codigo/:codigo', authMiddleware, adminMiddleware, ingressoController.consultarPorCodigo);
+router.get('/pedido/:idPedido/pdf', authMiddleware, ingressoController.pdfDoPedido);
+router.get('/:id/pdf', authMiddleware, ingressoController.pdfDoIngresso);
 router.get('/:id', authMiddleware, ingressoController.buscarPorId);
 
 module.exports = router;

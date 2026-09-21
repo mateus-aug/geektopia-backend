@@ -91,6 +91,18 @@ function validarDados(corpo, ehCriacao) {
     dados.quantidade_total = quantidade;
   }
 
+  if (corpo.limite_por_pessoa !== undefined) {
+    if (corpo.limite_por_pessoa === null || corpo.limite_por_pessoa === '') {
+      dados.limite_por_pessoa = null;
+    } else {
+      const lim = Number(corpo.limite_por_pessoa);
+      if (!Number.isInteger(lim) || lim < 1 || lim > 50) {
+        return { erro: 'O campo "limite_por_pessoa" deve ser um inteiro de 1 a 50 (ou vazio para não limitar).' };
+      }
+      dados.limite_por_pessoa = lim;
+    }
+  }
+
   if (corpo.categoria !== undefined) {
     if (!CATEGORIAS.includes(corpo.categoria)) {
       return { erro: `O campo "categoria" deve ser um destes: ${CATEGORIAS.join(', ')}.` };
