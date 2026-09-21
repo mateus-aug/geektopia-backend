@@ -4,6 +4,8 @@ const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
 const { MAX_INGRESSOS_POR_PEDIDO, validarTitular, idadeExigida, limiteDoLote } = require('../utils/titulares');
 const { client, baseUrl, frontendUrl } = require('../services/paymentService');
+const { confirmarPagamentoAprovado } = require('../services/confirmacaoPagamento');
+const { validarAssinaturaWebhook } = require('../services/webhookMercadoPago');
 
 // Monta a resposta de um pedido, convertendo os Decimal do Prisma (pedido,
 // itens e pagamento) em número comum, igual ao padrão usado no restante da API.
@@ -223,128 +225,36 @@ exports.criarPedido = async (req, res) => {
   }
 };
 
-// Traduz o método que o Mercado Pago informou para o enum do schema.
-// `payment_method_id` identifica o Pix especificamente; os demais casos vêm
-// em `payment_type_id`. Cai em null (em vez de adivinhar) quando o Mercado
-// Pago manda um tipo que não mapeamos — errado seria gravar um valor chutado.
-function mapearMetodoPagamento(pagamentoInfo) {
-  if (pagamentoInfo.payment_method_id === 'pix') return 'Pix';
-
-  switch (pagamentoInfo.payment_type_id) {
-    case 'credit_card':
-      return 'CartaoCredito';
-    case 'debit_card':
-      return 'CartaoDebito';
-    case 'ticket':
-      return 'Boleto';
-    case 'account_money':
-      return 'SaldoConta';
-    default:
-      return null;
-  }
-}
-
-// Aplica os efeitos de um pagamento aprovado: marca o Pagamento/Pedido como
-// Pago e gera os Ingressos. Compartilhado pelo webhook e pela sincronização
-// manual (item 5) — os dois descobrem o mesmo jeito que um pagamento foi
-// aprovado, só que por caminhos diferentes, e precisam do mesmo resultado.
-//
-// Idempotente: se o pedido já estava "Pago" (ex.: o webhook e a sincronização
-// manual chegarem quase juntos), não gera ingresso duplicado.
-async function aplicarPagamentoAprovado(idPedidoBanco, pagamentoInfo) {
-  await prisma.pagamento.update({
-    where: { id_pedido: idPedidoBanco },
-    data: {
-      status_pagamento: 'Aprovado',
-      metodo_pagamento: mapearMetodoPagamento(pagamentoInfo),
-      codigo_transacao: String(pagamentoInfo.id),
-      data_pagamento: new Date()
-    }
-  });
-
-  const pedidoExistente = await prisma.pedido.findUnique({
-    where: { id_pedido: idPedidoBanco }
-  });
-
-  if (pedidoExistente.status_pedido === 'Pago') {
-    console.log(`⚠️ Pedido #${idPedidoBanco} já estava Pago. Notificação duplicada ignorada.`);
-    return;
-  }
-
-  const pedidoAtualizado = await prisma.pedido.update({
-    where: { id_pedido: idPedidoBanco },
-    data: { status_pedido: 'Pago' },
-    include: { itens: true }
-  });
-
-  // GERAR OS INGRESSOS AUTOMATICAMENTE NA TABELA INGRESSO
-  for (const item of pedidoAtualizado.itens) {
-    if (item.id_lote) {
-      // Busca o lote (e a classificação da edição) para gravar a idade exigida no ingresso.
-      const loteDoBanco = await prisma.lote.findUnique({
-        where: { id_lote: item.id_lote },
-        include: { geektopia: { select: { classificacao_etaria: true } } }
-      });
-
-      if (loteDoBanco) {
-        const titulares = Array.isArray(item.titulares) ? item.titulares : [];
-        // Congelada na emissão: mudar a classificação depois não altera o que já foi vendido.
-        const idadeMinima = idadeExigida(loteDoBanco, loteDoBanco.geektopia);
-
-        for (let i = 0; i < item.quantidade; i++) {
-          const titular = titulares[i];
-          await prisma.ingresso.create({
-            data: {
-              id_usuario: pedidoAtualizado.id_usuario,
-              id_geektopia: loteDoBanco.id_geektopia, // Usa o ID do evento atrelado ao Lote
-              id_lote: item.id_lote,
-              id_item: item.id_item,
-              codigo_qr: `GT-${crypto.randomUUID()}`,
-              status_ingresso: 'Valido',
-              ...(titular && {
-                nome_titular: titular.nome_completo,
-                documento_titular: titular.documento,
-                data_nascimento_titular: new Date(`${titular.data_nascimento}T00:00:00Z`)
-              }),
-              idade_minima: idadeMinima
-            }
-          });
-        }
-      }
-    }
-  }
-
-  console.log(`✅ Pedido #${idPedidoBanco} PAGO e Ingressos gerados com sucesso!`);
-}
-
 // 2. RECEBER WEBHOOK E GERAR INGRESSOS
 exports.receberWebhook = async (req, res) => {
-    console.log('========== WEBHOOK RECEBIDO ==========');
-    console.log('Headers:', req.headers);
-    console.log('Query:', req.query);
-
-    console.log('Body:', req.body);
   try {
     const type = req.body?.type || req.query?.topic;
     const paymentId = req.body?.data?.id || req.query?.id;
 
+    // Assinatura do Mercado Pago (quando MP_WEBHOOK_SECRET está configurado): recusa quem não é o MP.
+    const assinatura = validarAssinaturaWebhook(req);
+    if (!assinatura.valida) {
+      console.warn(`Webhook recusado: ${assinatura.motivo}`);
+      return res.sendStatus(401);
+    }
+
     if (type === 'payment' && paymentId) {
+      // Nunca confiamos no corpo do webhook: o pagamento é sempre reconsultado no Mercado Pago.
       const payment = new Payment(client);
       const pagamentoInfo = await payment.get({ id: paymentId });
 
-      const statusMP = pagamentoInfo.status;
       const refExterna = JSON.parse(pagamentoInfo.external_reference || '{}');
       const idPedidoBanco = Number(refExterna.id_pedido);
 
-      if (statusMP === 'approved' && idPedidoBanco) {
-        await aplicarPagamentoAprovado(idPedidoBanco, pagamentoInfo);
+      if (pagamentoInfo.status === 'approved' && idPedidoBanco) {
+        await confirmarPagamentoAprovado(idPedidoBanco, pagamentoInfo);
       }
     }
 
     return res.sendStatus(200);
   } catch (error) {
     console.error('Erro ao processar Webhook:', error);
-    return res.sendStatus(500);
+    return res.sendStatus(500); // o Mercado Pago tenta de novo
   }
 };
 
@@ -447,7 +357,9 @@ exports.sincronizarPagamento = async (req, res) => {
       }
     });
 
-    const pagamentoInfo = busca.results?.[0];
+    // Se houve mais de uma tentativa, vale a aprovada; senão, a mais recente.
+    const resultados = busca.results || [];
+    const pagamentoInfo = resultados.find((p) => p.status === 'approved') || resultados[0];
 
     if (!pagamentoInfo) {
       return res.json({
@@ -457,8 +369,9 @@ exports.sincronizarPagamento = async (req, res) => {
     }
 
     if (pagamentoInfo.status === 'approved') {
-      await aplicarPagamentoAprovado(id, pagamentoInfo);
-      return res.json({ status_pedido: 'Pago', mensagem: 'Pagamento aprovado! Ingresso(s) gerado(s).' });
+      const r = await confirmarPagamentoAprovado(id, pagamentoInfo);
+      if (r.ok) return res.json({ status_pedido: 'Pago', mensagem: r.jaConfirmado ? 'Este pedido já estava confirmado.' : 'Pagamento aprovado! Ingresso(s) gerado(s).' });
+      return res.json({ status_pedido: pedido.status_pedido, mensagem: 'O pagamento foi aprovado, mas precisa de conferência da organização. Entre em contato com a CCPOP informando o número do pedido.' });
     }
 
     return res.json({

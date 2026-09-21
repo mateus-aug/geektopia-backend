@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { notificar, notificarAdmins } = require('../services/notificacoes');
 const { lerId, lerTexto } = require('../utils/validadores');
 const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
 
@@ -99,7 +100,7 @@ exports.criar = async (req, res) => {
 
     const expositor = await prisma.expositor.findUnique({
       where: { id_usuario: idUsuario },
-      select: { id_usuario: true, status_aprovacao: true }
+      select: { id_usuario: true, status_aprovacao: true, nome_loja_projeto: true }
     });
 
     if (!expositor) {
@@ -198,6 +199,12 @@ exports.criar = async (req, res) => {
         ...congelado
       },
       include: INCLUIR
+    });
+
+    notificarAdmins({
+      tipo: 'solicitacao_nova', titulo: 'Novo pedido de espaço para analisar',
+      texto: `${expositor.nome_loja_projeto || 'Um expositor'} pediu espaço em ${nova.geektopia?.nome_edicao || 'uma edição'}.`,
+      link: '/admin/solicitacoes?tipo=expositores'
     });
 
     return res.status(201).json({
@@ -436,6 +443,22 @@ exports.alterarStatus = async (req, res) => {
       data: { status_solicitacao },
       include: INCLUIR
     });
+
+    // O expositor é avisado da decisão (site e, se configurado, e-mail).
+    const nomeEdicao = atualizada.geektopia?.nome_edicao || 'a edição';
+    if (status_solicitacao === 'Aprovado') {
+      notificar(atualizada.id_usuario, {
+        tipo: 'solicitacao_aprovada', titulo: 'Seu pedido de espaço foi aprovado!',
+        texto: `A diretoria aprovou o seu pedido de espaço em ${nomeEdicao}. Falta pagar a taxa para confirmar a sua presença.`,
+        link: `/expositor/solicitacoes/${id}`
+      });
+    } else if (status_solicitacao === 'Reprovado') {
+      notificar(atualizada.id_usuario, {
+        tipo: 'solicitacao_reprovada', titulo: 'Seu pedido de espaço não foi aprovado',
+        texto: `A diretoria não aprovou o seu pedido de espaço em ${nomeEdicao}. Você pode fazer uma nova solicitação.`,
+        link: `/expositor/solicitacoes/${id}`
+      });
+    }
 
     return res.json({
       message: `Solicitação marcada como "${status_solicitacao}".`,

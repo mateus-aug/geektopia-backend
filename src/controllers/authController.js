@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
+const { apagarArquivoLocal } = require('../utils/arquivos');
 const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
 
@@ -201,7 +202,8 @@ exports.uploadAvatar = async (req, res) => {
       return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
     }
 
-    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/avatars/${req.file.filename}`;
+    const avatarUrl = req.file.url;
+    const anterior = await prisma.perfil.findUnique({ where: { id_usuario: req.userId }, select: { avatar_url: true } });
 
     await prisma.usuario.update({
       where: { id_usuario: req.userId },
@@ -214,6 +216,9 @@ exports.uploadAvatar = async (req, res) => {
         }
       }
     });
+
+    // A foto antiga sai do armazenamento (evita acumular lixo a cada troca de foto).
+    if (anterior?.avatar_url && anterior.avatar_url !== avatarUrl) apagarArquivoLocal(anterior.avatar_url);
 
     return res.json({ message: 'Foto atualizada com sucesso!', avatar_url: avatarUrl });
   } catch (error) {

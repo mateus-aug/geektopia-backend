@@ -1,12 +1,32 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const limites = require('./middlewares/limites');
 const routes = require('./routes');
 const path = require('path');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Atrás de proxy (Render, Railway, ngrok...) o IP real vem no cabeçalho: sem isso o limite de uso enxerga o proxy.
+app.set('trust proxy', 1);
+
+// Cabeçalhos de segurança. As imagens são servidas para o front (outro endereço), então liberamos o uso entre origens.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+// CORS: só o front do projeto pode chamar a API pelo navegador (URL_FRONTEND, aceita vários separados por vírgula).
+// Chamadas sem Origin (servidor do Mercado Pago, curl, testes) não são de navegador e passam normalmente.
+const origensPermitidas = () => {
+  const lista = String(process.env.URL_FRONTEND || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+  if (process.env.NODE_ENV !== 'production') lista.push('http://localhost:5173', 'http://127.0.0.1:5173');
+  return lista;
+};
+app.use(cors({
+  origin: (origem, cb) => (!origem || origensPermitidas().includes(origem) ? cb(null, true) : cb(null, false)),
+  credentials: false
+}));
+
+app.use(express.json({ limit: '200kb' }));
+app.use('/api', (req, res, next) => (req.path === '/pedidos/webhook' ? next() : limites.geral(req, res, next)));
 
 // Todas as rotas ficarão sob /api
 app.use('/api', routes);
