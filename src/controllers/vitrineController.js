@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
 const { urlDoUpload, apagarArquivoLocal, descartarUpload } = require('../utils/arquivos');
+const { conteudoGeektopia } = require('./conteudoController');
 
 // Conteúdo da vitrine pública de uma edição: convidados, fotos e expositores
 // confirmados. O texto e a cor da edição vivem no geektopiaController.
@@ -333,7 +334,8 @@ exports.removerFoto = async (req, res) => {
     if (!atual) return res.status(404).json({ error: 'Foto não encontrada.' });
 
     await prisma.foto_Edicao.delete({ where: { id_foto: id } });
-    apagarArquivoLocal(atual.url_foto);
+    // A mesma imagem pode estar no carrossel do site: só apaga o arquivo se ninguém mais usa.
+    if ((await prisma.foto_Site.count({ where: { url_foto: atual.url_foto } })) === 0) apagarArquivoLocal(atual.url_foto);
 
     return res.json({ message: 'Foto removida com sucesso!' });
   } catch (error) {
@@ -509,13 +511,9 @@ exports.vitrinePublica = async (req, res) => {
     const idsParaResumo = [...pockets.map((p) => p.id_geektopia), ...(edicao ? [edicao.id_geektopia] : [])];
     const resumos = await resumoDeIngressos(idsParaResumo);
 
-    const fotos = await prisma.foto_Edicao.findMany({
-      // Fotos são só da Geektopia Principal (vigente ou já passada); Pocket não tem galeria.
-      where: { geektopia: { ...publicas, tipo_edicao: { in: ['Principal', 'PrincipalAnterior'] } } },
-      select: { id_foto: true, url_foto: true, legenda: true, geektopia: { select: { nome_edicao: true } } },
-      orderBy: [{ geektopia: maisRecente }, { ordem: 'asc' }, { id_foto: 'asc' }],
-      take: MAX_FOTOS
-    });
+    // O carrossel e os textos gerais são da página, não da edição: criar outro evento não os altera.
+    const fotos = await prisma.foto_Site.findMany({ where: { area: 'geektopia' }, orderBy: [{ ordem: 'asc' }, { id_foto: 'asc' }], take: MAX_FOTOS });
+    const conteudo = await conteudoGeektopia();
 
     let destaque = null;
     if (edicao) {
@@ -545,7 +543,8 @@ exports.vitrinePublica = async (req, res) => {
     return res.json({
       destaque,
       proxima_edicao_ano: destaque ? null : proximaEdicaoAno,
-      galeria: fotos.map((f) => ({ id_foto: f.id_foto, url_foto: f.url_foto, legenda: f.legenda, edicao: f.geektopia.nome_edicao })),
+      galeria: fotos.map((f) => ({ id_foto: f.id_foto, url_foto: f.url_foto, legenda: f.legenda })),
+      conteudo,
       pockets: pockets.map((p) => ({ ...p, ingressos: resumos.get(p.id_geektopia) }))
     });
   } catch (error) {

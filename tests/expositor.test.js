@@ -25,7 +25,7 @@ test('espaço pertence a uma edição e a solicitação respeita isso', async ()
   assert.equal((await c('GET', `/espacos?id_geektopia=${ed2}`, H)).b.length, 0, 'outra edição não enxerga');
 
   assert.equal((await c('POST', '/solicitacoes-espaco', H, { id_geektopia: ed1, id_espaco: esp.id_espaco })).s, 403, 'sem perfil de expositor');
-  assert.equal((await c('POST', '/parceiros/expositor', H, { nome_loja_projeto: 'ZZ Loja' })).s, 201);
+  assert.equal((await c('POST', '/parceiros/expositor', H, { nome_loja_projeto: 'ZZ Loja', url_portfolio: 'https://instagram.com/zz' })).s, 201);
   const errada = await c('POST', '/solicitacoes-espaco', H, { id_geektopia: ed2, id_espaco: esp.id_espaco });
   assert.equal(errada.s, 400);
   assert.match(errada.b.error, /não pertence/);
@@ -44,7 +44,7 @@ test('cobrança da taxa: só após aprovação, retomável, sem duplicar, confir
   const { u, H } = await criarUsuario('exp2');
   const c = servidor.call;
   const esp = (await c('POST', '/espacos', admin, { id_geektopia: ed, tipo_espaco: 'ZZ Mesa', valor_base: 100 })).b.espaco;
-  await c('POST', '/parceiros/expositor', H, { nome_loja_projeto: 'ZZ Loja 2' });
+  await c('POST', '/parceiros/expositor', H, { nome_loja_projeto: 'ZZ Loja 2', url_portfolio: 'https://instagram.com/zz' });
   const sol = (await c('POST', '/solicitacoes-espaco', H, { id_geektopia: ed, id_espaco: esp.id_espaco })).b.solicitacao;
   const id = sol.id_solicitacao;
 
@@ -74,7 +74,7 @@ test('cobrança da taxa: só após aprovação, retomável, sem duplicar, confir
 
   // Pagamento de valor errado NÃO confirma a taxa.
   const { u: u2, H: H2 } = await criarUsuario('exp3');
-  await c('POST', '/parceiros/expositor', H2, { nome_loja_projeto: 'ZZ Loja 3' });
+  await c('POST', '/parceiros/expositor', H2, { nome_loja_projeto: 'ZZ Loja 3', url_portfolio: 'https://instagram.com/zz' });
   const s2 = (await c('POST', '/solicitacoes-espaco', H2, { id_geektopia: ed, id_espaco: esp.id_espaco })).b.solicitacao;
   await c('PATCH', `/solicitacoes-espaco/${s2.id_solicitacao}/status`, admin, { status_solicitacao: 'Aprovado' });
   const pg = (await c('POST', `/solicitacoes-espaco/${s2.id_solicitacao}/pagamento`, H2)).b;

@@ -267,14 +267,19 @@ model Pagamento {
 // ---------------- TABELAS DE EVENTOS E ESPAÇOS ----------------
 
 model Evento_Externo {
-  id_evento_externo   Int       @id @default(autoincrement())
+  id_evento_externo   Int                 @id @default(autoincrement())
   id_organizador      Int // Obrigatório
-  nome_evento         String    @db.VarChar(150)
+  nome_evento         String              @db.VarChar(150)
   data_evento         DateTime?
-  local               String?   @db.VarChar(200)
-  descricao           String?   @db.Text
-  url_saiba_mais      String?   @db.Text
-  regras_idade_minima String?   @db.Text
+  local               String?             @db.VarChar(200)
+  descricao           String?             @db.Text
+  url_saiba_mais      String?             @db.Text
+  regras_idade_minima String?             @db.Text
+  data_fim            DateTime?
+  status_aprovacao    StatusAprovacaoEnum @default(EmAnalise)
+  publicado           Boolean             @default(false)
+  motivo_recusa       String?             @db.VarChar(300)
+  criado_em           DateTime            @default(now())
 
   organizador Organizador_Externo @relation(fields: [id_organizador], references: [id_usuario])
 }
@@ -513,6 +518,17 @@ model Notificacao {
 }
 
 // Textos editáveis pelo admin das páginas informativas (hoje só a landing page: chave "landing").
+// Fotos das páginas informativas (carrossel da página Geektopia), independentes de qualquer edição.
+model Foto_Site {
+  id_foto  Int     @id @default(autoincrement())
+  area     String  @default("geektopia") @db.VarChar(30)
+  url_foto String  @db.Text
+  legenda  String? @db.VarChar(200)
+  ordem    Int     @default(0)
+
+  @@index([area, ordem])
+}
+
 model Conteudo_Site {
   chave         String   @id @db.VarChar(60)
   valor         Json

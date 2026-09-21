@@ -60,7 +60,7 @@ test('decisão do admin sobre o pedido de espaço avisa o expositor (e o pedido 
   const ed = await prisma.geektopia.create({ data: { nome_edicao: 'ZZ EDICAO NOT', tipo_edicao: 'Pocket', status_evento: 'VendasEncerradas', classificacao_etaria: 0 } });
   const esp = (await servidor.call('POST', '/espacos', admin, { id_geektopia: ed.id_geektopia, tipo_espaco: 'ZZ Mesa', valor_base: 50 })).b.espaco;
   const u = await criarUsuario('not4');
-  await servidor.call('POST', '/parceiros/expositor', u.H, { nome_loja_projeto: 'ZZ Loja Not' });
+  await servidor.call('POST', '/parceiros/expositor', u.H, { nome_loja_projeto: 'ZZ Loja Not', url_portfolio: 'https://instagram.com/zz' });
   const sol = (await servidor.call('POST', '/solicitacoes-espaco', u.H, { id_geektopia: ed.id_geektopia, id_espaco: esp.id_espaco })).b.solicitacao;
   await esperar(400);
   const paraAdmin = (await minhas(admin)).itens.find((n) => n.tipo === 'solicitacao_nova' && /ZZ Loja Not/.test(n.texto));

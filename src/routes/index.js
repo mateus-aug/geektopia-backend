@@ -16,6 +16,9 @@ const convidadoRoutes = require('./convidadoRoutes');
 const fotoEdicaoRoutes = require('./fotoEdicaoRoutes');
 const conteudoRoutes = require('./conteudoRoutes');
 const notificacaoRoutes = require('./notificacaoRoutes');
+const eventoComunidadeRoutes = require('./eventoComunidadeRoutes');
+const relatorioRoutes = require('./relatorioRoutes');
+const fotoSiteRoutes = require('./fotoSiteRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
@@ -34,5 +37,8 @@ router.use('/convidados', convidadoRoutes);
 router.use('/fotos-edicao', fotoEdicaoRoutes);
 router.use('/conteudo', conteudoRoutes);
 router.use('/notificacoes', notificacaoRoutes);
+router.use('/eventos-comunidade', eventoComunidadeRoutes);
+router.use('/relatorios', relatorioRoutes);
+router.use('/fotos-site', fotoSiteRoutes);
 
 module.exports = router;
