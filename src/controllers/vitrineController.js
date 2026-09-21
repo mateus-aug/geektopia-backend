@@ -493,19 +493,15 @@ exports.vitrinePublica = async (req, res) => {
     const edicao = await prisma.geektopia.findFirst({ where: { ...publicas, tipo_edicao: 'Principal' } });
     const origem = 'Principal';
 
-    const anterior = edicao ? null : await prisma.geektopia.findFirst({
-      where: { ...publicas, tipo_edicao: 'PrincipalAnterior' },
-      orderBy: maisRecente,
-      select: { nome_edicao: true, data_inicio: true }
-    });
-    const anoAnterior = anterior?.data_inicio ? new Date(anterior.data_inicio).getUTCFullYear() : 0;
-    const proximaEdicaoAno = Math.max(new Date().getFullYear(), anoAnterior) + 1;
+    // A Geektopia é anual: se este ano já teve (ou não há edição em andamento), a próxima é no ano que vem.
+    const proximaEdicaoAno = new Date().getFullYear() + 1;
 
     const pockets = await prisma.geektopia.findMany({
-      where: { ...publicas, tipo_edicao: 'Pocket' },
+      // Pocket encerrado sai da página (continua acessível pelo link direto do evento).
+      where: { tipo_edicao: 'Pocket', status_evento: { in: STATUS_PUBLICOS.filter((s) => s !== 'Encerrado') } },
       select: {
         id_geektopia: true, nome_edicao: true, data_inicio: true, data_fim: true, local: true,
-        banner_url: true, status_evento: true, classificacao_etaria: true, tagline: true, cor_destaque: true
+        banner_url: true, banner_fundo: true, status_evento: true, classificacao_etaria: true, tagline: true, cor_destaque: true
       },
       orderBy: maisRecente
     });
@@ -514,7 +510,8 @@ exports.vitrinePublica = async (req, res) => {
     const resumos = await resumoDeIngressos(idsParaResumo);
 
     const fotos = await prisma.foto_Edicao.findMany({
-      where: { geektopia: { ...publicas, tipo_edicao: 'PrincipalAnterior' } },
+      // Fotos são só da Geektopia Principal (vigente ou já passada); Pocket não tem galeria.
+      where: { geektopia: { ...publicas, tipo_edicao: { in: ['Principal', 'PrincipalAnterior'] } } },
       select: { id_foto: true, url_foto: true, legenda: true, geektopia: { select: { nome_edicao: true } } },
       orderBy: [{ geektopia: maisRecente }, { ordem: 'asc' }, { id_foto: 'asc' }],
       take: MAX_FOTOS

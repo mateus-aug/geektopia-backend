@@ -463,8 +463,10 @@ exports.listarTodas = async (req, res) => {
           select: {
             nickname_competidor: true,
             modalidade_principal: true,
+            url_portfolio: true,
+            link_redes_sociais: true,
             participante: {
-              select: { usuario: { select: { nome_completo: true, email: true, telefone: true } } }
+              select: { usuario: { select: { nome_completo: true, email: true, telefone: true, perfil: { select: { avatar_url: true } } } } }
             }
           }
         }

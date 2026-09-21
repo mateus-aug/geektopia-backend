@@ -139,6 +139,12 @@ exports.criar = async (req, res) => {
       return res.status(404).json({ error: 'O tipo de espaço informado não existe.' });
     }
 
+    // O espaço precisa ser da edição escolhida (não são os mesmos espaços em
+    // toda Geektopia: muda o local, o layout e o preço).
+    if (espaco.id_geektopia !== idGeektopia) {
+      return res.status(400).json({ error: 'Este espaço não pertence à edição escolhida. Escolha um espaço da lista desta edição.' });
+    }
+
     // Edição encerrada ou ainda em rascunho não recebe candidatura.
     if (edicao.status_evento === 'Encerrado') {
       return res.status(409).json({
@@ -288,6 +294,8 @@ exports.listarTodas = async (req, res) => {
           select: {
             nome_loja_projeto: true,
             tipo_expositor: true,
+            url_logo: true,
+            url_portfolio: true,
             usuario: { select: { nome_completo: true, email: true, telefone: true } }
           }
         }

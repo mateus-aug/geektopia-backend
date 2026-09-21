@@ -108,7 +108,7 @@ model Usuario {
   telefone        String?  @db.VarChar(20)
   genero          String?  @db.VarChar(50)
   sexualidade     String?  @db.VarChar(50)
-  estado          String?  @db.VarChar(2)   
+  estado          String?  @db.VarChar(2)
   cidade          String?  @db.VarChar(100)
   data_cadastro   DateTime @default(now())
 
@@ -278,30 +278,33 @@ model Evento_Externo {
 }
 
 model Geektopia {
-  id_geektopia        Int              @id @default(autoincrement())
-  nome_edicao         String           @db.VarChar(150)
-  data_inicio         DateTime?
-  data_fim            DateTime?
-  local               String?          @db.VarChar(200)
-  descricao           String?          @db.Text
-  banner_url          String?          @db.Text
-  status_evento       StatusEventoEnum @default(Bloqueado)
-  tipo_edicao         TipoEdicaoGeektopiaEnum @default(Pocket)
+  id_geektopia         Int                     @id @default(autoincrement())
+  nome_edicao          String                  @db.VarChar(150)
+  data_inicio          DateTime?
+  data_fim             DateTime?
+  local                String?                 @db.VarChar(200)
+  descricao            String?                 @db.Text
+  banner_url           String?                 @db.Text
+  status_evento        StatusEventoEnum        @default(Bloqueado)
+  tipo_edicao          TipoEdicaoGeektopiaEnum @default(Pocket)
   classificacao_etaria Int? // classificação indicativa: 0 = livre, ou 10/12/14/16/18. Nulo = não informada
-  regras_idade_minima String?          @db.Text
-  aviso_documentacao  String?          @db.Text
-  qnt_dias            Int?
+  regras_idade_minima  String?                 @db.Text
+  aviso_documentacao   String?                 @db.Text
+  objetos_proibidos    String?                 @db.Text // itens que não podem entrar no evento, um por linha
+  qnt_dias             Int?
 
   // Conteúdo editável da vitrine pública
-  tagline        String? @db.VarChar(200)
-  texto_sobre    String? @db.Text
-  destaques      Json? // lista de { titulo, descricao }, validada no controller
-  cor_destaque   String? @db.VarChar(7) // hex, ex.: #F7C531
+  tagline      String? @db.VarChar(200)
+  texto_sobre  String? @db.Text
+  destaques    Json? // lista de { titulo, descricao }, validada no controller
+  cor_destaque String? @db.VarChar(7) // hex, ex.: #F7C531
+  banner_fundo String? @db.VarChar(40) // fundo do topo sem imagem: "#RRGGBB" ou gradiente "#RRGGBB,#RRGGBB[,ângulo]"
 
   lotes              Lote[]
   convidados         Convidado[]
   fotos              Foto_Edicao[]
   solicitacoesEspaco Solicitacao_Espaco[]
+  espacos            Espaco[]
   feedbacks          Feedback[]
   competicoes        Competicao[]
   programacoes       Programacao[]
@@ -336,10 +339,10 @@ model Foto_Edicao {
 }
 
 model Lote {
-  id_lote          Int      @id @default(autoincrement())
+  id_lote          Int                   @id @default(autoincrement())
   id_geektopia     Int // Obrigatório: Todo lote pertence a um evento
-  nome_lote        String?  @db.VarChar(50)
-  valor_ingresso   Decimal? @db.Decimal(10, 2)
+  nome_lote        String?               @db.VarChar(50)
+  valor_ingresso   Decimal?              @db.Decimal(10, 2)
   quantidade_total Int?
   categoria        CategoriaIngressoEnum @default(Inteira) // agrupa os lotes na página do evento
   idade_minima     Int? // idade mínima deste lote (10/12/14/16/18). Nulo = herda a classificação da edição
@@ -351,6 +354,7 @@ model Lote {
 
 model Espaco {
   id_espaco                Int      @id @default(autoincrement())
+  id_geektopia             Int? // edição a que este espaço pertence (mesa 2m da Geektopia X, cadeira verde da Geektopia Halloween...)
   tipo_espaco              String?  @db.VarChar(100)
   largura_espaco           Decimal? @db.Decimal(5, 2)
   comprimento_espaco       Decimal? @db.Decimal(5, 2)
@@ -365,7 +369,10 @@ model Espaco {
   valor_taxa_cadeira_extra Decimal? @db.Decimal(10, 2)
   descricao                String?  @db.Text
 
+  geektopia    Geektopia?           @relation(fields: [id_geektopia], references: [id_geektopia])
   solicitacoes Solicitacao_Espaco[]
+
+  @@index([id_geektopia])
 }
 
 model Solicitacao_Espaco {
@@ -446,18 +453,18 @@ model Programacao {
 // ---------------- TABELAS DE IDENTIFICAÇÃO E INSCRIÇÃO ----------------
 
 model Ingresso {
-  id_ingresso       Int                @id @default(autoincrement())
-  id_usuario        Int // Obrigatório
-  id_geektopia      Int // Obrigatório
-  id_lote           Int // Obrigatório
-  id_item           Int? // Opcional: Se for cortesia/manual pode não ter item de pedido
-  codigo_qr         String             @unique @db.VarChar(255)
-  status_ingresso   StatusIngressoEnum @default(Valido)
-  data_checkin      DateTime?
-  nome_titular      String?            @db.VarChar(255)
-  documento_titular String?            @db.VarChar(50)
-  data_nascimento_titular DateTime?    @db.Date // permite validar a idade de quem vai usar o ingresso (a compra pode ser para outra pessoa)
-  idade_minima      Int? // idade exigida quando o ingresso foi emitido (congelada: mudar a classificação depois não altera o que já foi vendido)
+  id_ingresso             Int                @id @default(autoincrement())
+  id_usuario              Int // Obrigatório
+  id_geektopia            Int // Obrigatório
+  id_lote                 Int // Obrigatório
+  id_item                 Int? // Opcional: Se for cortesia/manual pode não ter item de pedido
+  codigo_qr               String             @unique @db.VarChar(255)
+  status_ingresso         StatusIngressoEnum @default(Valido)
+  data_checkin            DateTime?
+  nome_titular            String?            @db.VarChar(255)
+  documento_titular       String?            @db.VarChar(50)
+  data_nascimento_titular DateTime?          @db.Date // permite validar a idade de quem vai usar o ingresso (a compra pode ser para outra pessoa)
+  idade_minima            Int? // idade exigida quando o ingresso foi emitido (congelada: mudar a classificação depois não altera o que já foi vendido)
 
   usuario     Usuario      @relation(fields: [id_usuario], references: [id_usuario])
   geektopia   Geektopia    @relation(fields: [id_geektopia], references: [id_geektopia])
