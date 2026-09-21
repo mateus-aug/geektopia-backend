@@ -89,6 +89,16 @@ function validarDados(corpo, ehCriacao) {
     dados.tipo_espaco = tipo;
   }
 
+  // Cada espaço pertence a uma edição: mesa 2m da Geektopia X não é a mesma mesa
+  // da Geektopia Halloween (mudam o local, o layout e o preço).
+  if (ehCriacao || corpo.id_geektopia !== undefined) {
+    const idGeektopia = lerId(corpo.id_geektopia);
+    if (!idGeektopia) {
+      return { erro: 'O campo "id_geektopia" é obrigatório: escolha a edição a que o espaço pertence.' };
+    }
+    dados.id_geektopia = idGeektopia;
+  }
+
   const numericos = [
     ['largura_espaco', MEDIDA_MAXIMA, false],
     ['comprimento_espaco', MEDIDA_MAXIMA, false],
@@ -116,14 +126,22 @@ function validarDados(corpo, ehCriacao) {
   return { dados };
 }
 
-// GET /api/espacos - catálogo de tipos de estande
+// GET /api/espacos?id_geektopia=7 - espaços de uma edição
 //
-// Sem filtro por status de evento, diferente dos outros módulos: a tabela
-// Espaco não tem id_geektopia. É um catálogo global, reaproveitado entre as
-// edições, e o expositor precisa ver os preços antes de se candidatar.
+// O expositor precisa ver os preços antes de se candidatar, então a consulta é
+// pública. Sem o filtro devolve todos (uso do painel); ?id_geektopia=... traz
+// só os da edição escolhida.
 exports.listar = async (req, res) => {
   try {
+    const where = {};
+    if (req.query.id_geektopia !== undefined) {
+      const idGeektopia = lerId(req.query.id_geektopia);
+      if (!idGeektopia) return res.status(400).json({ error: 'O filtro "id_geektopia" é inválido.' });
+      where.id_geektopia = idGeektopia;
+    }
+
     const espacos = await prisma.espaco.findMany({
+      where,
       // Do mais barato para o mais caro: é a ordem esperada num catálogo.
       orderBy: { valor_base: 'asc' }
     });
@@ -169,6 +187,11 @@ exports.criar = async (req, res) => {
       return res.status(400).json({ error: erro });
     }
 
+    const edicao = await prisma.geektopia.findUnique({ where: { id_geektopia: dados.id_geektopia }, select: { id_geektopia: true } });
+    if (!edicao) {
+      return res.status(404).json({ error: 'A edição informada não existe.' });
+    }
+
     const novo = await prisma.espaco.create({ data: dados });
 
     return res.status(201).json({
@@ -207,11 +230,19 @@ exports.atualizar = async (req, res) => {
 
     const existe = await prisma.espaco.findUnique({
       where: { id_espaco: id },
-      select: { id_espaco: true }
+      select: { id_espaco: true, id_geektopia: true, _count: { select: { solicitacoes: true } } }
     });
 
     if (!existe) {
       return res.status(404).json({ error: 'Espaço não encontrado.' });
+    }
+
+    if (dados.id_geektopia !== undefined && dados.id_geektopia !== existe.id_geektopia) {
+      if (existe._count.solicitacoes > 0) {
+        return res.status(409).json({ error: 'Este espaço já tem solicitações de expositores e não pode mudar de edição.' });
+      }
+      const edicao = await prisma.geektopia.findUnique({ where: { id_geektopia: dados.id_geektopia }, select: { id_geektopia: true } });
+      if (!edicao) return res.status(404).json({ error: 'A edição informada não existe.' });
     }
 
     const atualizado = await prisma.espaco.update({
@@ -265,5 +296,38 @@ exports.remover = async (req, res) => {
   } catch (error) {
     console.error('Erro ao remover espaço:', error);
     return res.status(500).json({ error: 'Erro ao remover o espaço.' });
+  }
+};
+
+// POST /api/espacos/copiar - reaproveita os espaços de uma edição em outra
+// Corpo: { de_geektopia, para_geektopia }. Copia medidas, itens e preços; a
+// diretoria ajusta depois o que mudou. Não copia se já houver espaço igual (mesmo nome) no destino.
+exports.copiar = async (req, res) => {
+  try {
+    const de = lerId(req.body.de_geektopia);
+    const para = lerId(req.body.para_geektopia);
+    if (!de || !para || de === para) {
+      return res.status(400).json({ error: 'Informe duas edições diferentes: "de_geektopia" e "para_geektopia".' });
+    }
+
+    const [origem, destino] = await Promise.all([
+      prisma.espaco.findMany({ where: { id_geektopia: de } }),
+      prisma.espaco.findMany({ where: { id_geektopia: para }, select: { tipo_espaco: true } })
+    ]);
+    const jaTem = new Set(destino.map((e) => (e.tipo_espaco || '').toLowerCase()));
+    const copiar = origem.filter((e) => !jaTem.has((e.tipo_espaco || '').toLowerCase()));
+
+    if (copiar.length === 0) {
+      return res.status(409).json({ error: origem.length === 0 ? 'A edição de origem não tem espaços cadastrados.' : 'A edição de destino já tem todos esses espaços.' });
+    }
+
+    await prisma.espaco.createMany({
+      data: copiar.map(({ id_espaco, ...resto }) => ({ ...resto, id_geektopia: para }))
+    });
+
+    return res.status(201).json({ message: `${copiar.length} espaço(s) copiado(s).`, copiados: copiar.length });
+  } catch (error) {
+    console.error('Erro ao copiar espaços:', error);
+    return res.status(500).json({ error: 'Erro ao copiar os espaços.' });
   }
 };

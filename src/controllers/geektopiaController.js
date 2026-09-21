@@ -20,10 +20,12 @@ const CAMPOS_DA_LISTA = {
   tipo_edicao: true,
   tagline: true,
   cor_destaque: true,
+  banner_fundo: true,
   classificacao_etaria: true
 };
 
 const COR_HEX = /^#[0-9a-fA-F]{6}$/;
+const FUNDO_BANNER = /^#[0-9a-fA-F]{6}(,#[0-9a-fA-F]{6}(,(?:[0-9]|[1-9][0-9]|[12][0-9]{2}|3[0-5][0-9]|360))?)?$/;
 
 // Classificação indicativa brasileira: 0 = livre. Mesmos valores do CHECK do banco.
 const CLASSIFICACOES = [0, 10, 12, 14, 16, 18];
@@ -97,6 +99,9 @@ function validarDados(corpo, ehCriacao) {
   if (corpo.regras_idade_minima !== undefined) {
     dados.regras_idade_minima = lerTexto(corpo.regras_idade_minima, 2000);
   }
+  if (corpo.objetos_proibidos !== undefined) {
+    dados.objetos_proibidos = lerTexto(corpo.objetos_proibidos, 3000);
+  }
   if (corpo.aviso_documentacao !== undefined) {
     dados.aviso_documentacao = lerTexto(corpo.aviso_documentacao, 2000);
   }
@@ -133,6 +138,16 @@ function validarDados(corpo, ehCriacao) {
       return { erro: 'O campo "cor_destaque" deve ser uma cor hexadecimal (ex.: #F7C531).' };
     } else {
       dados.cor_destaque = corpo.cor_destaque.toUpperCase();
+    }
+  }
+
+  if (corpo.banner_fundo !== undefined) {
+    if (corpo.banner_fundo === null || corpo.banner_fundo === '') {
+      dados.banner_fundo = null;
+    } else if (typeof corpo.banner_fundo !== 'string' || !FUNDO_BANNER.test(corpo.banner_fundo)) {
+      return { erro: 'O campo "banner_fundo" deve ser uma cor (#RRGGBB) ou um gradiente (#RRGGBB,#RRGGBB ou #RRGGBB,#RRGGBB,ângulo).' };
+    } else {
+      dados.banner_fundo = corpo.banner_fundo.toUpperCase();
     }
   }
 

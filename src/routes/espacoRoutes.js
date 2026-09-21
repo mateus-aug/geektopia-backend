@@ -5,14 +5,14 @@ const authMiddleware = require('../middlewares/authMiddleware');
 const adminMiddleware = require('../middlewares/adminMiddleware');
 
 // Rotas administrativas.
+router.post('/copiar', authMiddleware, adminMiddleware, espacoController.copiar);
 router.post('/', authMiddleware, adminMiddleware, espacoController.criar);
 router.put('/:id', authMiddleware, adminMiddleware, espacoController.atualizar);
 router.delete('/:id', authMiddleware, adminMiddleware, espacoController.remover);
 
 // Rotas públicas.
-// Não há versão "admin" da consulta aqui: Espaco é um catálogo global, sem
-// vínculo com edição, então não existe rascunho para esconder do público.
-// O expositor precisa ver os preços antes de decidir se candidatar.
+// O expositor precisa ver os preços antes de decidir se candidatar. Cada espaço
+// pertence a uma edição: use GET /espacos?id_geektopia=ID.
 router.get('/', espacoController.listar);
 router.get('/:id', espacoController.buscarPorId);
 
