@@ -95,6 +95,13 @@ exports.criarPedido = async (req, res) => {
         }
       }
 
+      // Lote com limite por pessoa (ou meia-entrada, 1 por pessoa): a compra não pode passar desse número,
+      // como nas plataformas de ingresso. A tela já trava a seleção; aqui garantimos para quem burlar a tela.
+      const limiteDaCompra = limiteDoLote(lote);
+      if (limiteDaCompra && quantidade > limiteDaCompra) {
+        return res.status(400).json({ error: `O ingresso "${lote.nome_lote}" é limitado a ${limiteDaCompra} por compra.`, campo: 'quantidade' });
+      }
+
       // Cada ingresso sai em nome de um titular (nome, documento e nascimento).
       if (!Array.isArray(item.titulares) || item.titulares.length !== quantidade) {
         return res.status(400).json({ error: `Informe os dados dos ${quantidade} titular(es) do lote "${lote.nome_lote}".` });

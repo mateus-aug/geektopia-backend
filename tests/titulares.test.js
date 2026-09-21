@@ -33,9 +33,11 @@ test('validações dos titulares na compra', async () => {
   assert.match(menor.b.error, /exige 14/);
 
   const duasMeias = await ped(H, [{ id_lote: meia.id_lote, quantidade: 2, titulares: [T(), T()] }]);
-  assert.equal(duasMeias.s, 409, 'meia-entrada: 1 por pessoa');
-  assert.equal((await ped(H, [{ id_lote: meia.id_lote, quantidade: 2, titulares: [T(), T('Beto Lima', CPFS[1], '1996-04-11')] }])).s, 201, 'meias para pessoas diferentes');
-  assert.equal((await ped(H, [{ id_lote: lim2.id_lote, quantidade: 3, titulares: [T(), T(), T()] }])).s, 409, 'limite configurado (2)');
+  assert.equal(duasMeias.s, 400, 'meia-entrada: 1 por compra');
+  assert.match(duasMeias.b.error, /limitado a 1 por compra/);
+  assert.equal((await ped(H, [{ id_lote: meia.id_lote, quantidade: 1, titulares: [T('Beto Lima', CPFS[1], '1996-04-11')] }])).s, 201, 'uma meia por compra');
+  assert.equal((await ped(H, [{ id_lote: lim2.id_lote, quantidade: 3, titulares: [T(), T('Beto Lima', CPFS[1], '1996-04-11'), T('Caio Reis', CPFS[2], '1990-01-01')] }])).s, 400, 'limite configurado (2) por compra');
+  assert.equal((await ped(H, [{ id_lote: lim2.id_lote, quantidade: 2, titulares: [T(), T('Beto Lima', CPFS[1], '1996-04-11')] }])).s, 201, 'até o limite (2) passa');
   const onze = Array.from({ length: 11 }, (_, i) => T(`Pessoa Numero ${i}`, CPFS[2]));
   assert.equal((await ped(H, [{ id_lote: inteira.id_lote, quantidade: 11, titulares: onze }])).s, 400, 'máximo 10 por compra');
 });
