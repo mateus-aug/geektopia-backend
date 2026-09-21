@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 const { senhaAtendeRequisitos } = require('../utils/validarSenha');
+const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
 
 // ===================================================
 // 1. AUTENTICAÇÃO E CADASTRO
@@ -10,102 +11,26 @@ const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 // Cadastro de usuário
 exports.register = async (req, res) => {
   try {
-    const {
-      nome_completo,
-      cpf,
-      cnpj,
-      passaporte,
-      email,
-      senha,
-      data_nascimento,
-      telefone,
-      estado,
-      cidade,
-      genero,
-      sexualidade
-    } = req.body;
-
-    // 1. Validação do Formato de E-mail
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Informe um e-mail válido.' });
-    }
-
-    // 2. Sanitização e Limpeza dos Campos
-    const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
-    const cpfLimpo = cpf ? cpf.replace(/\D/g, '') : null;
-    const cnpjLimpo = cnpj ? cnpj.replace(/\D/g, '') : null;
-    const passaporteLimpo = passaporte ? passaporte.trim().toUpperCase() : null;
-
-    // 3. Valida se ao menos um dos documentos foi preenchido
-    if (!cpfLimpo && !cnpjLimpo && !passaporteLimpo) {
-      return res.status(400).json({ error: 'Documento é obrigatório.' });
-    }
-
-    // 4. Valida tamanho dos documentos
-    if (cpfLimpo && cpfLimpo.length !== 11) {
-      return res.status(400).json({ error: 'CPF inválido: deve conter exatamente 11 dígitos.' });
-    }
-    if (cnpjLimpo && cnpjLimpo.length !== 14) {
-      return res.status(400).json({ error: 'CNPJ inválido: deve conter exatamente 14 dígitos.' });
-    }
-
-    // 5. Valida a Data de Nascimento
-    const dataFormatada = new Date(`${data_nascimento}T12:00:00-03:00`);
-    const anoAtual = new Date().getFullYear();
-
-    if (!data_nascimento || isNaN(dataFormatada.getTime())) {
-      return res.status(400).json({ error: 'Data de nascimento inválida.' });
-    }
-    if (dataFormatada > new Date()) {
-      return res.status(400).json({ error: 'Data de nascimento não pode ser no futuro.' });
-    }
-    if (dataFormatada.getFullYear() < anoAtual - 120) {
-      return res.status(400).json({ error: 'Data de nascimento inválida: ano muito antigo.' });
-    }
-
-    // 6. Valida a senha
-    if (!senhaAtendeRequisitos(senha)) {
-      return res.status(400).json({
-        error: 'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.'
-      });
-    }
-
-    // 7. Verificação de Duplicidade no Banco
-    const userExists = await prisma.usuario.findFirst({
-      where: {
-        OR: [
-          { email },
-          ...(cpfLimpo ? [{ cpf: cpfLimpo }] : []),
-          ...(cnpjLimpo ? [{ cnpj: cnpjLimpo }] : []),
-          ...(passaporteLimpo ? [{ passaporte: passaporteLimpo }] : [])
-        ]
-      }
+    // Todas as regras (formato, data, telefone, senha...) ficam em
+    // validacaoUsuario.js, as mesmas usadas pelo painel do administrador.
+    const { erro, campo, dados } = validarUsuario(req.body, {
+      exigirSenha: true,
+      exigirTelefone: true,
+      exigirLocalizacao: true
     });
 
-    if (userExists) {
-      return res.status(400).json({ error: 'E-mail ou Documento já cadastrado no sistema.' });
+    if (erro) {
+      return res.status(400).json({ error: erro, campo });
     }
 
-    // 8. Criptografia de Senha
-    const hashedPassword = await bcrypt.hash(senha, 10);
+    const conflito = await buscarConflito(prisma, dados);
+    if (conflito) {
+      return res.status(409).json({ error: conflito.erro, campo: conflito.campo });
+    }
 
-    // 9. Gravação na Tabela
+    const { senha, ...resto } = dados;
     const newUser = await prisma.usuario.create({
-      data: {
-        nome_completo,
-        cpf: cpfLimpo,
-        cnpj: cnpjLimpo,
-        passaporte: passaporteLimpo,
-        email,
-        senha: hashedPassword,
-        data_nascimento: dataFormatada,
-        telefone: telefoneLimpo,
-        estado: estado || null,
-        cidade: cidade || null,
-        genero: genero || null,
-        sexualidade: sexualidade || null
-      }
+      data: { ...resto, senha: await bcrypt.hash(senha, 10) }
     });
 
     delete newUser.senha;
@@ -302,15 +227,45 @@ exports.uploadAvatar = async (req, res) => {
 // ===================================================
 
 // [ADMIN] Listar todos os usuários da plataforma
+// GET /api/auth/admin/users?pagina=1&limite=20&q=texto&tipo=admin|cliente&ordem=recentes|nome
+//
+// Paginada NO SERVIDOR: com milhares de usuários, mandar todos de uma vez
+// pesaria no banco, na rede e no navegador. A busca vale para nome, e-mail e
+// início do CPF (só dígitos).
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await prisma.usuario.findMany({
+    const limite = Math.min(Math.max(parseInt(req.query.limite, 10) || 20, 1), 100);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+
+    const where = {};
+    if (q) {
+      const digitos = q.replace(/\D/g, '');
+      where.OR = [
+        { nome_completo: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        ...(digitos.length >= 3 ? [{ cpf: { startsWith: digitos } }] : [])
+      ];
+    }
+    if (req.query.tipo === 'admin') where.administrador = { isNot: null };
+    if (req.query.tipo === 'cliente') where.administrador = { is: null };
+
+    const total = await prisma.usuario.count({ where });
+    const paginas = Math.max(1, Math.ceil(total / limite));
+    // Página fora do intervalo (ex.: filtrou e sobrou menos): cai na última.
+    const pagina = Math.min(Math.max(parseInt(req.query.pagina, 10) || 1, 1), paginas);
+
+    const orderBy = req.query.ordem === 'nome'
+      ? [{ nome_completo: 'asc' }, { id_usuario: 'asc' }]
+      : [{ data_cadastro: 'desc' }, { id_usuario: 'desc' }]; // desempate estável entre páginas
+
+    const itens = await prisma.usuario.findMany({
+      where,
       select: {
         id_usuario: true,
         nome_completo: true,
         email: true,
         cpf: true,
-        cnpj: true,       
+        cnpj: true,
         passaporte: true,
         telefone: true,
         cidade: true,
@@ -319,13 +274,71 @@ exports.getAllUsers = async (req, res) => {
         perfil: true,
         administrador: true
       },
-      orderBy: { data_cadastro: 'desc' }
+      orderBy,
+      skip: (pagina - 1) * limite,
+      take: limite
     });
 
-    return res.json(users);
+    return res.json({ itens, total, pagina, limite, paginas });
   } catch (error) {
     console.error('Erro ao listar usuários:', error);
     return res.status(500).json({ error: 'Erro ao buscar lista de usuários.' });
+  }
+};
+
+// GET /api/auth/admin/users/:id_usuario - um usuário completo (para editar)
+exports.obterUsuarioAdmin = async (req, res) => {
+  try {
+    const id = Number(req.params.id_usuario);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { id_usuario: id },
+      select: {
+        id_usuario: true, nome_completo: true, cpf: true, cnpj: true, passaporte: true, email: true,
+        telefone: true, data_nascimento: true, estado: true, cidade: true, genero: true, sexualidade: true,
+        data_cadastro: true, administrador: true, perfil: true
+      }
+    });
+
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    return res.json(usuario);
+  } catch (error) {
+    console.error('Erro ao buscar usuário pelo painel ADM:', error);
+    return res.status(500).json({ error: 'Erro ao buscar o usuário.' });
+  }
+};
+
+// POST /api/auth/admin/users - o administrador cadastra um usuário
+// Corpo: os campos do cadastro + nivel_permissao? (cria já como administrador)
+exports.criarUsuarioAdmin = async (req, res) => {
+  try {
+    const { erro, campo, dados } = validarUsuario(req.body, { exigirSenha: true });
+    if (erro) return res.status(400).json({ error: erro, campo });
+
+    const nivel = req.body.nivel_permissao;
+    if (nivel && !NIVEIS_ADMIN.includes(nivel)) {
+      return res.status(400).json({ error: `O nível deve ser um destes: ${NIVEIS_ADMIN.join(', ')}.`, campo: 'nivel_permissao' });
+    }
+
+    const conflito = await buscarConflito(prisma, dados);
+    if (conflito) return res.status(409).json({ error: conflito.erro, campo: conflito.campo });
+
+    const { senha, ...resto } = dados;
+    const novo = await prisma.usuario.create({
+      data: {
+        ...resto,
+        senha: await bcrypt.hash(senha, 10),
+        ...(nivel ? { administrador: { create: { nivel_permissao: nivel } } } : {})
+      },
+      include: { administrador: true }
+    });
+
+    delete novo.senha;
+    return res.status(201).json({ message: 'Usuário cadastrado com sucesso!', user: novo });
+  } catch (error) {
+    console.error('Erro ao criar usuário pelo painel ADM:', error);
+    return res.status(500).json({ error: 'Erro ao cadastrar usuário.' });
   }
 };
 
@@ -365,52 +378,64 @@ exports.promoteToAdmin = async (req, res) => {
 // [ADMIN] Excluir qualquer usuário por ID
 exports.adminDeleteUser = async (req, res) => {
   try {
-    const { id_usuario } = req.params;
+    const id = Number(req.params.id_usuario);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
 
-    await prisma.usuario.delete({
-      where: { id_usuario: Number(id_usuario) }
-    });
+    if (id === req.userId) {
+      return res.status(409).json({ error: 'Você não pode excluir a sua própria conta por aqui.' });
+    }
+
+    await prisma.usuario.delete({ where: { id_usuario: id } });
 
     return res.json({ message: 'Usuário removido da base de dados com sucesso.' });
   } catch (error) {
+    // P2003: há registros ligados (pedidos, ingressos...). Apagar destruiria histórico.
+    if (error.code === 'P2003') {
+      return res.status(409).json({ error: 'Não é possível excluir: este usuário tem pedidos, ingressos ou outros registros vinculados.' });
+    }
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
     console.error('Erro ao excluir usuário pelo painel ADM:', error);
     return res.status(500).json({ error: 'Erro ao remover usuário.' });
   }
 };
 
 // [ADMIN] Editar dados de qualquer usuário
+// PUT /api/auth/admin/users/:id_usuario
+// Edita os dados cadastrais (o que veio no corpo). Senha não muda por aqui.
 exports.adminUpdateUser = async (req, res) => {
   try {
-    const { id_usuario } = req.params;
-    const { nome_completo, telefone, cidade, estado, email } = req.body;
+    const id = Number(req.params.id_usuario);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
 
-    const targetUser = await prisma.usuario.findUnique({
-      where: { id_usuario: Number(id_usuario) }
-    });
+    const alvo = await prisma.usuario.findUnique({ where: { id_usuario: id } });
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-    if (!targetUser) {
-      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const { erro, campo, dados } = validarUsuario(req.body, { parcial: true });
+    if (erro) return res.status(400).json({ error: erro, campo });
+
+    if (Object.keys(dados).length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo válido foi enviado para atualização.' });
     }
 
-    if (email && email !== targetUser.email) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({ error: 'Informe um e-mail válido.' });
-      }
-      const emailEmUso = await prisma.usuario.findUnique({ where: { email } });
-      if (emailEmUso) {
-        return res.status(400).json({ error: 'Este e-mail já está em uso por outro usuário.' });
-      }
+    // Depois da edição o usuário precisa continuar com pelo menos um documento.
+    const final = { cpf: alvo.cpf, cnpj: alvo.cnpj, passaporte: alvo.passaporte, ...dados };
+    if (!final.cpf && !final.cnpj && !final.passaporte) {
+      return res.status(400).json({ error: 'O usuário precisa ter ao menos um documento (CPF, CNPJ ou passaporte).', campo: 'documento' });
     }
 
-    const updatedUser = await prisma.usuario.update({
-      where: { id_usuario: Number(id_usuario) },
-      data: { nome_completo, telefone, cidade, estado, email },
+    const conflito = await buscarConflito(prisma, dados, id);
+    if (conflito) return res.status(409).json({ error: conflito.erro, campo: conflito.campo });
+
+    const atualizado = await prisma.usuario.update({
+      where: { id_usuario: id },
+      data: dados,
       include: { administrador: true, perfil: true }
     });
 
-    delete updatedUser.senha;
-    return res.json({ message: 'Usuário atualizado com sucesso!', user: updatedUser });
+    delete atualizado.senha;
+    return res.json({ message: 'Usuário atualizado com sucesso!', user: atualizado });
   } catch (error) {
     console.error('Erro ao atualizar usuário pelo painel ADM:', error);
     return res.status(500).json({ error: 'Erro ao atualizar usuário.' });

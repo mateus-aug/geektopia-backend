@@ -19,6 +19,8 @@ router.post('/upload-avatar', authMiddleware, uploadMiddleware.avatar.single('av
 
 // === ROTAS PAINEL ADM (Requer ser Admin) ===
 router.get('/admin/users', authMiddleware, adminMiddleware, authController.getAllUsers);
+router.post('/admin/users', authMiddleware, adminMiddleware, authController.criarUsuarioAdmin);
+router.get('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.obterUsuarioAdmin);
 router.post('/admin/promote/:id_usuario', authMiddleware, adminMiddleware, authController.promoteToAdmin);
 router.delete('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminDeleteUser);
 router.put('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminUpdateUser);
