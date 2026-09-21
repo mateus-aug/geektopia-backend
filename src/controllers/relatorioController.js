@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { lerId } = require('../utils/validadores');
 const R = require('../services/relatorios');
+const { CATEGORIAS_GENERO, CATEGORIAS_SEXUALIDADE } = require('../utils/genero');
 
 // RELATÓRIOS (só administradores). Um endpoint monta o painel inteiro com os filtros da query:
 //   id_geektopia  edição            de / ate  período da COMPRA (AAAA-MM-DD)
@@ -23,7 +24,8 @@ const lerFiltros = (q) => ({
   ate: dataFiltro(q.ate, true),
   estado: String(q.estado || '').slice(0, 2) || null,
   cidade: String(q.cidade || '').slice(0, 100) || null,
-  genero: String(q.genero || '').slice(0, 50) || null,
+  genero: CATEGORIAS_GENERO.includes(q.genero) ? q.genero : null,
+  sexualidade: CATEGORIAS_SEXUALIDADE.includes(q.sexualidade) ? q.sexualidade : null,
   faixa: R.FAIXAS.some((f) => f.rotulo === q.faixa) || q.faixa === 'Não informada' ? q.faixa : null,
   base: q.base === 'cadastros' ? 'cadastros' : 'participantes'
 });
@@ -44,7 +46,7 @@ exports.painel = async (req, res) => {
       select: {
         id_ingresso: true, id_geektopia: true, status_ingresso: true, data_checkin: true, data_nascimento_titular: true,
         lote: { select: { id_lote: true, nome_lote: true, categoria: true } },
-        usuario: { select: { id_usuario: true, cidade: true, estado: true, genero: true, data_nascimento: true } },
+        usuario: { select: { id_usuario: true, cidade: true, estado: true, genero: true, sexualidade: true, data_nascimento: true } },
         itemPedido: { select: { preco_unitario_momento: true, pedido: { select: { data_pedido: true } } } }
       }
     });
@@ -56,7 +58,7 @@ exports.painel = async (req, res) => {
       valor: numero(i.itemPedido?.preco_unitario_momento), data: i.itemPedido?.pedido?.data_pedido || null,
       cortesia: !i.itemPedido,
       comprador: i.usuario.id_usuario,
-      pessoa: { cidade: i.usuario.cidade, estado: i.usuario.estado, genero: i.usuario.genero, idade: R.idadeEm(i.data_nascimento_titular || i.usuario.data_nascimento) }
+      pessoa: { cidade: i.usuario.cidade, estado: i.usuario.estado, genero: i.usuario.genero, sexualidade: i.usuario.sexualidade, idade: R.idadeEm(i.data_nascimento_titular || i.usuario.data_nascimento) }
     }));
 
     const noPeriodo = linhas.filter((l) => (!f.de || (l.data && l.data >= f.de)) && (!f.ate || (l.data && l.data <= f.ate)));
@@ -67,8 +69,8 @@ exports.painel = async (req, res) => {
     // ------------------------------------------------ público (demografia)
     let pessoas;
     if (f.base === 'cadastros') {
-      const us = await prisma.usuario.findMany({ select: { cidade: true, estado: true, genero: true, data_nascimento: true } });
-      pessoas = us.map((u) => ({ cidade: u.cidade, estado: u.estado, genero: u.genero, idade: R.idadeEm(u.data_nascimento) })).filter((p) => R.passaNoFiltro(p, f));
+      const us = await prisma.usuario.findMany({ select: { cidade: true, estado: true, genero: true, sexualidade: true, data_nascimento: true } });
+      pessoas = us.map((u) => ({ cidade: u.cidade, estado: u.estado, genero: u.genero, sexualidade: u.sexualidade, idade: R.idadeEm(u.data_nascimento) })).filter((p) => R.passaNoFiltro(p, f));
     } else {
       pessoas = vendidos.map((l) => l.pessoa);
     }
@@ -112,11 +114,11 @@ exports.painel = async (req, res) => {
     const universo = f.base === 'cadastros' ? pessoas : noPeriodo.filter((l) => l.status !== 'Cancelado').map((l) => l.pessoa);
     const cidades = [...new Map(universo.filter((p) => p.cidade).map((p) => [R.chaveTexto(p.cidade), R.capitalizar(p.cidade)])).values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     const estados = [...new Set(universo.filter((p) => p.estado).map((p) => p.estado.toUpperCase()))].sort();
-    const generos = [...new Map(universo.filter((p) => p.genero).map((p) => [R.chaveTexto(p.genero), R.capitalizar(p.genero)])).values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const generos = CATEGORIAS_GENERO;
 
     return res.json({
       filtros_aplicados: { ...f, de: req.query.de || null, ate: req.query.ate || null },
-      opcoes: { edicoes: edicoes.map((e) => ({ id: e.id_geektopia, nome: e.nome_edicao })), cidades, estados, generos, faixas: [...R.FAIXAS.map((x) => x.rotulo), 'Não informada'] },
+      opcoes: { sexualidades: CATEGORIAS_SEXUALIDADE, edicoes: edicoes.map((e) => ({ id: e.id_geektopia, nome: e.nome_edicao })), cidades, estados, generos, faixas: [...R.FAIXAS.map((x) => x.rotulo), 'Não informada'] },
       resumo: {
         ingressos_vendidos: vendidos.length,
         receita_ingressos: receita,

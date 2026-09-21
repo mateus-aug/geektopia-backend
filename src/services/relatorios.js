@@ -1,6 +1,8 @@
 // RELATÓRIOS: agrega dados para o painel. As funções de contagem são puras (recebem listas simples), para
 // serem testadas sem banco. Quem busca no banco é o relatorioController.
 
+const { categoriaGenero, categoriaSexualidade, CATEGORIAS_GENERO, CATEGORIAS_SEXUALIDADE } = require('../utils/genero');
+
 const FAIXAS = [
   { rotulo: 'Até 11 anos', min: 0, max: 11 },
   { rotulo: '12 a 17', min: 12, max: 17 },
@@ -33,8 +35,8 @@ const arred = (n) => Math.round(n * 100) / 100;
 function contar(itens, obterChave, { rotuloDe = (k) => k, limite = null } = {}) {
   const mapa = new Map();
   for (const it of itens) {
-    const { chave, rotulo } = obterChave(it);
-    const atual = mapa.get(chave) || { chave, rotulo, quantidade: 0 };
+    const { chave, rotulo, filtro } = obterChave(it);
+    const atual = mapa.get(chave) || { chave, rotulo, filtro, quantidade: 0 };
     atual.quantidade += 1;
     mapa.set(chave, atual);
   }
@@ -44,7 +46,7 @@ function contar(itens, obterChave, { rotuloDe = (k) => k, limite = null } = {}) 
     const resto = lista.slice(limite).reduce((s, x) => s + x.quantidade, 0);
     lista = [...lista.slice(0, limite), { chave: '__outras', rotulo: 'Outras', quantidade: resto }];
   }
-  return lista.map((x) => ({ chave: x.chave, rotulo: rotuloDe(x.rotulo), quantidade: x.quantidade, percentual: total ? arred((x.quantidade / total) * 100) : 0 }));
+  return lista.map((x) => ({ chave: x.chave, rotulo: rotuloDe(x.rotulo), filtro: x.filtro || null, quantidade: x.quantidade, percentual: total ? arred((x.quantidade / total) * 100) : 0 }));
 }
 
 // pessoas: [{ cidade, estado, genero, idade }]
@@ -67,21 +69,25 @@ function demografia(entrada) {
   const pessoas = completarEstados(entrada);
   const cidade = contar(pessoas, (p) => {
     if (!p.cidade) return { chave: 'nao', rotulo: 'Não informada' };
-    return { chave: `${chaveTexto(p.cidade)}|${(p.estado || '').toUpperCase()}`, rotulo: `${capitalizar(p.cidade)}${p.estado ? ` - ${p.estado.toUpperCase()}` : ''}` };
+    return { chave: `${chaveTexto(p.cidade)}|${(p.estado || '').toUpperCase()}`, rotulo: `${capitalizar(p.cidade)}${p.estado ? ` - ${p.estado.toUpperCase()}` : ''}`, filtro: { cidade: capitalizar(p.cidade), estado: (p.estado || '').toUpperCase() } };
   }, { limite: null });
-  const estado = contar(pessoas, (p) => ({ chave: (p.estado || 'nao').toUpperCase(), rotulo: p.estado ? p.estado.toUpperCase() : 'Não informado' }));
-  const genero = contar(pessoas, (p) => ({ chave: chaveTexto(p.genero) || 'nao', rotulo: p.genero ? capitalizar(p.genero) : 'Não informado' }));
-  const faixa = contar(pessoas, (p) => { const r = faixaDaIdade(p.idade); return { chave: r, rotulo: r }; });
+  const estado = contar(pessoas, (p) => ({ chave: (p.estado || 'nao').toUpperCase(), rotulo: p.estado ? p.estado.toUpperCase() : 'Não informado', filtro: p.estado ? { estado: p.estado.toUpperCase() } : null }));
+  const genero = contar(pessoas, (p) => { const c = categoriaGenero(p.genero); return { chave: c, rotulo: c, filtro: { genero: c } }; });
+  const sexualidade = contar(pessoas, (p) => { const c = categoriaSexualidade(p.sexualidade); return { chave: c, rotulo: c, filtro: { sexualidade: c } }; });
+  const faixa = contar(pessoas, (p) => { const r = faixaDaIdade(p.idade); return { chave: r, rotulo: r, filtro: { faixa: r } }; });
   const ordemFaixa = [...FAIXAS.map((f) => f.rotulo), 'Não informada'];
   faixa.sort((a, b) => ordemFaixa.indexOf(a.rotulo) - ordemFaixa.indexOf(b.rotulo));
-  return { por_cidade: cidade, por_estado: estado, por_genero: genero, por_faixa_etaria: faixa };
+  genero.sort((a, b) => CATEGORIAS_GENERO.indexOf(a.rotulo) - CATEGORIAS_GENERO.indexOf(b.rotulo));
+  sexualidade.sort((a, b) => CATEGORIAS_SEXUALIDADE.indexOf(a.rotulo) - CATEGORIAS_SEXUALIDADE.indexOf(b.rotulo));
+  return { por_cidade: cidade, por_estado: estado, por_genero: genero, por_sexualidade: sexualidade, por_faixa_etaria: faixa };
 }
 
 // Filtros demográficos (cidade, estado, gênero, faixa etária) aplicados a uma pessoa.
 function passaNoFiltro(p, f) {
   if (f.estado && (p.estado || '').toUpperCase() !== f.estado.toUpperCase()) return false;
   if (f.cidade && chaveTexto(p.cidade) !== chaveTexto(f.cidade)) return false;
-  if (f.genero && chaveTexto(p.genero) !== chaveTexto(f.genero)) return false;
+  if (f.genero && categoriaGenero(p.genero) !== f.genero) return false;
+  if (f.sexualidade && categoriaSexualidade(p.sexualidade) !== f.sexualidade) return false;
   if (f.faixa) {
     if (faixaDaIdade(p.idade) !== f.faixa) return false;
   }

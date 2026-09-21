@@ -4,6 +4,8 @@ const prisma = require('../config/prisma');
 const { apagarArquivoLocal } = require('../utils/arquivos');
 const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
+const { validarGenero, validarSexualidade } = require('../utils/genero');
+const { VERSAO_TERMOS } = require('../utils/termos');
 
 // ===================================================
 // 1. AUTENTICAÇÃO E CADASTRO
@@ -17,11 +19,17 @@ exports.register = async (req, res) => {
     const { erro, campo, dados } = validarUsuario(req.body, {
       exigirSenha: true,
       exigirTelefone: true,
-      exigirLocalizacao: true
+      exigirLocalizacao: true,
+      exigirGenero: true
     });
 
     if (erro) {
       return res.status(400).json({ error: erro, campo });
+    }
+
+    // Termos de Uso e Política de Privacidade: sem aceite não há cadastro. Guardamos quando e qual versão.
+    if (req.body.aceite_termos !== true) {
+      return res.status(400).json({ error: 'Leia e aceite os Termos de Uso e a Política de Privacidade para criar a conta.', campo: 'aceitaTermos' });
     }
 
     const conflito = await buscarConflito(prisma, dados);
@@ -31,7 +39,7 @@ exports.register = async (req, res) => {
 
     const { senha, ...resto } = dados;
     const newUser = await prisma.usuario.create({
-      data: { ...resto, senha: await bcrypt.hash(senha, 10) }
+      data: { ...resto, senha: await bcrypt.hash(senha, 10), termos_aceitos_em: new Date(), termos_versao: VERSAO_TERMOS }
     });
 
     delete newUser.senha;
@@ -119,6 +127,16 @@ exports.updateProfile = async (req, res) => {
   try {
     const { nome_completo, telefone, cidade, estado, nickname, avatar_url } = req.body;
 
+    // Gênero e sexualidade só entram se vierem (o perfil pode salvar sem mexer neles).
+    const extras = {};
+    for (const [campo, validar] of [['genero', validarGenero], ['sexualidade', validarSexualidade]]) {
+      if (req.body[campo] === undefined) continue;
+      const r = validar(req.body[campo]);
+      if (r.erro) return res.status(400).json({ error: r.erro, campo });
+      if (campo === 'genero' && !r.valor) return res.status(400).json({ error: 'Selecione o gênero (ou "Prefiro não informar").', campo });
+      extras[campo] = r.valor;
+    }
+
     const dadosPerfil = {};
     if (nickname !== undefined && nickname !== '') dadosPerfil.nickname = nickname;
     if (avatar_url !== undefined) dadosPerfil.avatar_url = avatar_url;
@@ -130,6 +148,7 @@ exports.updateProfile = async (req, res) => {
         telefone,
         cidade,
         estado,
+        ...extras,
         perfil: {
           upsert: {
             create: { nickname: nickname || null, avatar_url },

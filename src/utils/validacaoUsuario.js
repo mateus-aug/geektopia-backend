@@ -1,3 +1,4 @@
+const { validarGenero, validarSexualidade } = require('./genero');
 // Validação dos dados de usuário. Usada no cadastro público, na criação e na
 // edição feita pelo administrador, para as três regras nunca divergirem.
 //
@@ -81,8 +82,9 @@ function idadeEmAnos(data) {
 //   exigirSenha      senha obrigatória e verificada (criação)
 //   exigirTelefone   telefone obrigatório (cadastro público)
 //   exigirLocalizacao estado e cidade obrigatórios (cadastro público)
+//   exigirGenero      gênero obrigatório (cadastro público)
 function validarUsuario(corpo, opcoes = {}) {
-  const { parcial = false, exigirSenha = false, exigirTelefone = false, exigirLocalizacao = false } = opcoes;
+  const { parcial = false, exigirSenha = false, exigirTelefone = false, exigirLocalizacao = false, exigirGenero = false } = opcoes;
   const dados = {};
   const veio = (campo) => corpo[campo] !== undefined;
   const obrigatorio = (campo) => !parcial || veio(campo);
@@ -187,13 +189,17 @@ function validarUsuario(corpo, opcoes = {}) {
     }
   }
 
-  // ---- Opcionais
-  for (const campo of ['genero', 'sexualidade']) {
-    if (veio(campo)) {
-      const texto = typeof corpo[campo] === 'string' ? corpo[campo].trim() : '';
-      if (texto.length > 50) return erro(campo, 'Use no máximo 50 caracteres.');
-      dados[campo] = texto || null;
-    }
+  // ---- Gênero (obrigatório no cadastro público) e sexualidade (opcional, feita no perfil)
+  if (veio('genero') || (!parcial && exigirGenero)) {
+    const g = validarGenero(corpo.genero);
+    if (g.erro) return erro('genero', g.erro);
+    if (!g.valor && exigirGenero) return erro('genero', 'Selecione o gênero (ou "Prefiro não informar").');
+    dados.genero = g.valor;
+  }
+  if (veio('sexualidade')) {
+    const x = validarSexualidade(corpo.sexualidade);
+    if (x.erro) return erro('sexualidade', x.erro);
+    dados.sexualidade = x.valor;
   }
 
   // ---- Senha (só na criação)
