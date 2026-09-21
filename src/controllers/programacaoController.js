@@ -1,18 +1,15 @@
 const prisma = require('../config/prisma');
 const { lerId, lerData, lerTexto } = require('../utils/validadores');
 
-// Status de edição que o público pode enxergar. Se a edição está 'Bloqueado',
-// a grade de horários dela também fica invisível.
+// Status de edição visíveis ao público.
 const STATUS_PUBLICOS = ['VendasAbertas', 'VendasEncerradas', 'Encerrado'];
 
-// Dados da competição trazidos junto com a atividade, quando houver vínculo.
+// Campos da competição devolvidos junto com a atividade.
 const RESUMO_COMPETICAO = {
   select: { id_competicao: true, nome_competicao: true, modalidade: true }
 };
 
-// Valida os campos próprios da atividade. As chaves estrangeiras não entram
-// aqui: conferir se a edição e a competição existem exige ir ao banco, e esta
-// função é síncrona de propósito.
+// Valida os campos da atividade.
 function validarDados(corpo, ehCriacao) {
   const dados = {};
 
@@ -31,8 +28,7 @@ function validarDados(corpo, ehCriacao) {
         erro: 'O campo "data_hora_inicio" é obrigatório e deve ser uma data com hora válida (ex.: 2027-11-20T14:30:00).'
       };
     }
-    // Regra do Quadro 19 aplicada só na criação: uma atividade que já
-    // aconteceu precisa continuar editável (corrigir título, por exemplo).
+    // Só na criação: atividade passada continua editável.
     if (ehCriacao && inicio <= new Date()) {
       return { erro: 'A data e hora de início da atividade devem ser futuras.' };
     }
@@ -40,7 +36,7 @@ function validarDados(corpo, ehCriacao) {
   }
 
   if (corpo.data_hora_fim !== undefined) {
-    // Enviar null desmarca o horário de término, que é opcional no schema.
+    // null limpa o campo.
     if (corpo.data_hora_fim === null) {
       dados.data_hora_fim = null;
     } else {
@@ -59,22 +55,13 @@ function validarDados(corpo, ehCriacao) {
   return { dados };
 }
 
-// Confere o vínculo opcional com uma competição.
-//
-// Atende o Quadro 43 - "Validar vínculo entre programação e competição".
-// A chave estrangeira do banco só garante que a competição EXISTE. Ela não
-// impede vincular uma competição da edição de março à grade da edição de
-// novembro, porque as duas são competições válidas. Por isso comparamos
-// aqui a que edição a competição pertence.
-//
-// @returns {{erro: string|null, valor: number|null|undefined}}
-//          `valor` indefinido significa "o campo não foi enviado".
+// Confere se a competição existe e pertence à mesma edição.
+// valor: undefined = campo não enviado; null = desvincular.
 async function conferirCompeticao(corpo, idGeektopia) {
   if (corpo.id_competicao === undefined) {
     return { valor: undefined };
   }
 
-  // null desfaz o vínculo: a atividade deixa de ser uma competição.
   if (corpo.id_competicao === null) {
     return { valor: null };
   }
@@ -103,8 +90,7 @@ async function conferirCompeticao(corpo, idGeektopia) {
   return { valor: idCompeticao };
 }
 
-// GET /api/geektopia/:id/programacao - grade de horários de uma edição
-// Rota aninhada: a programação só faz sentido no contexto do evento.
+// GET /api/geektopia/:id/programacao
 exports.listarPorGeektopia = async (req, res) => {
   try {
     const idGeektopia = lerId(req.params.id);
@@ -118,7 +104,6 @@ exports.listarPorGeektopia = async (req, res) => {
       select: { status_evento: true }
     });
 
-    // 404 também para rascunho: não confirmamos nem que a edição existe.
     const visivel = edicao && (STATUS_PUBLICOS.includes(edicao.status_evento) || req.userIsAdmin === true);
 
     if (!visivel) {
@@ -128,7 +113,6 @@ exports.listarPorGeektopia = async (req, res) => {
     const atividades = await prisma.programacao.findMany({
       where: { id_geektopia: idGeektopia },
       include: { competicao: RESUMO_COMPETICAO },
-      // Ordem cronológica: é assim que uma grade de horários se lê.
       orderBy: { data_hora_inicio: 'asc' }
     });
 
@@ -139,7 +123,7 @@ exports.listarPorGeektopia = async (req, res) => {
   }
 };
 
-// GET /api/programacao/:id - uma atividade específica
+// GET /api/programacao/:id
 exports.buscarPorId = async (req, res) => {
   try {
     const id = lerId(req.params.id);
@@ -173,11 +157,9 @@ exports.buscarPorId = async (req, res) => {
   }
 };
 
-// POST /api/programacao - cadastra uma atividade na grade
-// Corpo: { id_geektopia, titulo_atividade, data_hora_inicio, data_hora_fim?, id_competicao? }
+// POST /api/programacao
 exports.criar = async (req, res) => {
   try {
-    // Quadro 43 - "Impedir programação sem Geektopia vinculada".
     const idGeektopia = lerId(req.body.id_geektopia);
 
     if (!idGeektopia) {
@@ -228,7 +210,7 @@ exports.criar = async (req, res) => {
   }
 };
 
-// PUT /api/programacao/:id - atualiza os campos enviados
+// PUT /api/programacao/:id
 exports.atualizar = async (req, res) => {
   try {
     const id = lerId(req.params.id);
@@ -237,8 +219,7 @@ exports.atualizar = async (req, res) => {
       return res.status(400).json({ error: 'O identificador da atividade é inválido.' });
     }
 
-    // Mover a atividade de edição bagunçaria a grade das duas. Recusamos com
-    // mensagem clara em vez de ignorar o campo em silêncio.
+    // Não permite trocar de edição.
     if (req.body.id_geektopia !== undefined) {
       return res.status(400).json({
         error: 'Não é permitido mover uma atividade para outra edição da Geektopia.'
@@ -254,7 +235,6 @@ exports.atualizar = async (req, res) => {
       return res.status(404).json({ error: 'Atividade não encontrada na programação.' });
     }
 
-    // A competição precisa pertencer à MESMA edição da atividade já gravada.
     const competicao = await conferirCompeticao(req.body, atual.id_geektopia);
 
     if (competicao.erro) {
@@ -275,7 +255,7 @@ exports.atualizar = async (req, res) => {
       return res.status(400).json({ error: 'Nenhum campo válido foi enviado para atualização.' });
     }
 
-    // Se só um dos horários veio no corpo, compara com o que está no banco.
+    // Horário que não veio no corpo é comparado com o do banco.
     const inicio = dados.data_hora_inicio !== undefined ? dados.data_hora_inicio : atual.data_hora_inicio;
     const fim = dados.data_hora_fim !== undefined ? dados.data_hora_fim : atual.data_hora_fim;
 
@@ -299,9 +279,7 @@ exports.atualizar = async (req, res) => {
   }
 };
 
-// DELETE /api/programacao/:id - remove uma atividade
-// Diferente da edição e do lote, aqui não há bloqueio: nenhuma outra tabela
-// aponta para Programacao, então apagar não destrói histórico de ninguém.
+// DELETE /api/programacao/:id
 exports.remover = async (req, res) => {
   try {
     const id = lerId(req.params.id);

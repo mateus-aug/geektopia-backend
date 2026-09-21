@@ -4,15 +4,14 @@ const institucionalController = require('../controllers/institucionalController'
 const authMiddleware = require('../middlewares/authMiddleware');
 const adminMiddleware = require('../middlewares/adminMiddleware');
 
-// ---- História institucional ----
-// Leitura pública: é o conteúdo da landing page.
+// História.
 router.get('/historia', institucionalController.listarHistoria);
 router.get('/historia/:id', institucionalController.buscarHistoria);
 router.post('/historia', authMiddleware, adminMiddleware, institucionalController.criarHistoria);
 router.put('/historia/:id', authMiddleware, adminMiddleware, institucionalController.atualizarHistoria);
 router.delete('/historia/:id', authMiddleware, adminMiddleware, institucionalController.removerHistoria);
 
-// ---- Galeria de edições passadas ----
+// Galeria.
 router.get('/galeria', institucionalController.listarGaleria);
 router.get('/galeria/:id', institucionalController.buscarGaleria);
 router.post('/galeria', authMiddleware, adminMiddleware, institucionalController.criarGaleria);

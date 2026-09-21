@@ -1,21 +1,14 @@
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
 
-// Conteúdo do portal do CCPOP: a história do conselho e a galeria de edições
-// passadas. Alimenta a landing page.
-//
-// As duas tabelas são independentes: não têm vínculo com edição do evento nem
-// entre si. São conteúdo institucional puro, por isso ficam no mesmo controller
-// em vez de dois arquivos de 40 linhas cada.
+// Conteúdo institucional do CCPOP: história e galeria de edições passadas.
 
 const ANO_MINIMO = 1900;
 const ANO_MAXIMO = 2100;
 
-// ==========================================================================
-// HISTÓRIA INSTITUCIONAL
-// ==========================================================================
+// ---------- História ----------
 
-// GET /api/institucional/historia - textos da história do CCPOP
+// GET /api/institucional/historia
 exports.listarHistoria = async (req, res) => {
   try {
     const historia = await prisma.historia_Institucional.findMany({
@@ -29,7 +22,7 @@ exports.listarHistoria = async (req, res) => {
   }
 };
 
-// GET /api/institucional/historia/:id - um texto específico
+// GET /api/institucional/historia/:id
 exports.buscarHistoria = async (req, res) => {
   try {
     const id = lerId(req.params.id);
@@ -135,7 +128,6 @@ exports.atualizarHistoria = async (req, res) => {
 };
 
 // DELETE /api/institucional/historia/:id
-// Sem bloqueio: nenhuma tabela aponta para Historia_Institucional.
 exports.removerHistoria = async (req, res) => {
   try {
     const id = lerId(req.params.id);
@@ -162,12 +154,9 @@ exports.removerHistoria = async (req, res) => {
   }
 };
 
-// ==========================================================================
-// GALERIA DE EDIÇÕES PASSADAS
-// ==========================================================================
+// ---------- Galeria ----------
 
-// GET /api/institucional/galeria - fotos de edições anteriores
-// Aceita ?ano=2025 como filtro.
+// GET /api/institucional/galeria?ano=
 exports.listarGaleria = async (req, res) => {
   try {
     const filtro = {};
@@ -182,8 +171,6 @@ exports.listarGaleria = async (req, res) => {
 
     const galeria = await prisma.galeria_Edicoes_Passadas.findMany({
       where: filtro,
-      // Mais recente primeiro. `nulls: 'last'` evita que registros sem ano
-      // ocupem o topo da galeria.
       orderBy: [{ ano: { sort: 'desc', nulls: 'last' } }, { id_galeria: 'desc' }]
     });
 
@@ -194,7 +181,7 @@ exports.listarGaleria = async (req, res) => {
   }
 };
 
-// GET /api/institucional/galeria/:id - uma foto específica
+// GET /api/institucional/galeria/:id
 exports.buscarGaleria = async (req, res) => {
   try {
     const id = lerId(req.params.id);
@@ -242,8 +229,6 @@ function validarGaleria(corpo, ehCriacao) {
     }
   }
 
-  // Enquanto o uploadService não existe, o campo recebe a URL de uma imagem
-  // já hospedada.
   if (ehCriacao || corpo.url_foto !== undefined) {
     const url = lerTexto(corpo.url_foto, 2000);
     if (!url) {
@@ -314,7 +299,6 @@ exports.atualizarGaleria = async (req, res) => {
 };
 
 // DELETE /api/institucional/galeria/:id
-// Sem bloqueio: nenhuma tabela aponta para Galeria_Edicoes_Passadas.
 exports.removerGaleria = async (req, res) => {
   try {
     const id = lerId(req.params.id);
