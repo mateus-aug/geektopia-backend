@@ -58,6 +58,14 @@ enum TipoEdicaoGeektopiaEnum {
   PrincipalAnterior // ex-Principal, substituída por uma edição mais nova
 }
 
+enum CategoriaIngressoEnum {
+  Inteira
+  Meia
+  MeetGreet
+  MeiaSolidaria
+  Outro
+}
+
 enum NivelPermissaoAdminEnum {
   ADMIN_GERAL
   ADMIN_CONTEUDO
@@ -333,6 +341,7 @@ model Lote {
   nome_lote        String?  @db.VarChar(50)
   valor_ingresso   Decimal? @db.Decimal(10, 2)
   quantidade_total Int?
+  categoria        CategoriaIngressoEnum @default(Inteira) // agrupa os lotes na página do evento
   idade_minima     Int? // idade mínima deste lote (10/12/14/16/18). Nulo = herda a classificação da edição
 
   geektopia   Geektopia     @relation(fields: [id_geektopia], references: [id_geektopia])
@@ -415,6 +424,7 @@ model Equipe_Competicao {
   id_lider             Int // Obrigatório: Pertence ao Competidor líder
   nome_equipe          String  @db.VarChar(100)
   link_portfolio_grupo String? @db.Text
+  integrantes          String? @db.Text // nomes dos demais integrantes, um por linha (o líder é o id_lider)
 
   competicao Competicao             @relation(fields: [id_competicao], references: [id_competicao])
   lider      Competidor             @relation(fields: [id_lider], references: [id_usuario])
@@ -465,6 +475,7 @@ model Inscricao_Competicao {
   url_portfolio_apresentacao String?                       @db.Text
   link_audio_apresentacao    String?                       @db.Text
   status_inscricao           StatusInscricaoCompeticaoEnum @default(AguardandoPagamento)
+  observacao_admin           String?                       @db.Text // justificativa da análise (aprovação/reprovação), vista pelo competidor
   data_inscricao             DateTime?                     @default(now())
 
   competicao Competicao         @relation(fields: [id_competicao], references: [id_competicao])

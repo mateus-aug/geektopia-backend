@@ -129,8 +129,11 @@ exports.criarPedido = async (req, res) => {
     console.log(`📍 Webhook URL enviada ao Mercado Pago: ${webhookUrl}`);
 
     // Gera a preferência no Mercado Pago
+    const inicioMP = Date.now();
+    let result;
+    try {
     const preference = new Preference(client);
-    const result = await preference.create({
+    result = await preference.create({
       body: {
         items: itensParaPreferencia,
         external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
@@ -147,6 +150,17 @@ exports.criarPedido = async (req, res) => {
         // mais, mas sem depender de mais nenhum serviço externo.
       }
     });
+    console.log(`⏱️ Mercado Pago respondeu em ${Date.now() - inicioMP} ms (pedido ${novoPedido.id_pedido})`);
+    } catch (erroMP) {
+      console.error(`Mercado Pago falhou após ${Date.now() - inicioMP} ms:`, erroMP?.message || erroMP);
+      // Nada foi cobrado: desfaz o pedido para não deixar "Pendente" órfão no histórico.
+      await prisma.$transaction([
+        prisma.pagamento.deleteMany({ where: { id_pedido: novoPedido.id_pedido } }),
+        prisma.item_Pedido.deleteMany({ where: { id_pedido: novoPedido.id_pedido } }),
+        prisma.pedido.delete({ where: { id_pedido: novoPedido.id_pedido } })
+      ]).catch((e) => console.error('Não foi possível desfazer o pedido:', e.message));
+      return res.status(502).json({ error: 'Não conseguimos abrir o pagamento no Mercado Pago agora. Nenhuma cobrança foi feita; tente novamente em instantes.' });
+    }
 
     return res.status(201).json({
       mensagem: 'Pedido criado com sucesso!',

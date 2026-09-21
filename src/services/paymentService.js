@@ -5,7 +5,10 @@ const { MercadoPagoConfig } = require('mercadopago');
 // para a taxa de expositor). Evita reconfigurar o SDK com o mesmo token em
 // cada arquivo que precisar cobrar algo.
 const client = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN
+  accessToken: process.env.MP_ACCESS_TOKEN,
+  // Sem isto, o SDK usa um limite padrão curto e, em rede lenta, a compra parece
+  // "travar" sem mensagem. 15 s é folga de sobra para uma chamada normal.
+  options: { timeout: 15000 }
 });
 
 // URL pública do backend (hoje o túnel do ngrok), usada para o Mercado Pago

@@ -29,6 +29,8 @@ router.post('/', authMiddleware, adminMiddleware, uploadMiddleware.eventos.singl
 
 // Rotas públicas: qualquer visitante acessa, sem token.
 router.get('/', geektopiaController.listarPublicas);
+// Antes de '/:id', senão "vitrine" seria lido como um identificador.
+router.get('/vitrine', vitrineController.vitrinePublica);
 router.get('/:id', geektopiaController.buscarPorId);
 router.get('/:id/lotes', loteController.listarPorGeektopia);
 router.get('/:id/programacao', programacaoController.listarPorGeektopia);

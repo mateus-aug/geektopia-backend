@@ -41,6 +41,9 @@ function montarResposta(lote) {
   return resposta;
 }
 
+// Valores aceitos pelo enum CategoriaIngressoEnum do schema.prisma.
+const CATEGORIAS = ['Inteira', 'Meia', 'MeetGreet', 'MeiaSolidaria', 'Outro'];
+
 // Valida os campos enviados. Só devolve o que veio no corpo, para o PUT
 // conseguir alterar um campo sem apagar os outros.
 //
@@ -86,6 +89,13 @@ function validarDados(corpo, ehCriacao) {
     }
 
     dados.quantidade_total = quantidade;
+  }
+
+  if (corpo.categoria !== undefined) {
+    if (!CATEGORIAS.includes(corpo.categoria)) {
+      return { erro: `O campo "categoria" deve ser um destes: ${CATEGORIAS.join(', ')}.` };
+    }
+    dados.categoria = corpo.categoria;
   }
 
   return { dados };

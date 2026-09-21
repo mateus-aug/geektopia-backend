@@ -21,6 +21,9 @@ const UFS = [
 
 const NIVEIS_ADMIN = ['ADMIN_GERAL', 'ADMIN_CONTEUDO'];
 
+// Idade mínima para ter conta. Quem é mais novo usa a conta de um responsável.
+const IDADE_MINIMA_CADASTRO = 12;
+
 function exigirDigitoVerificador() {
   const forcado = process.env.VALIDAR_DOCUMENTOS;
   if (forcado === 'true') return true;
@@ -61,6 +64,15 @@ function lerDataNascimento(valor) {
 }
 
 const erro = (campo, mensagem) => ({ erro: mensagem, campo });
+
+// Idade em anos completos hoje (datas em UTC, como são gravadas).
+function idadeEmAnos(data) {
+  const hoje = new Date();
+  let idade = hoje.getUTCFullYear() - data.getUTCFullYear();
+  const fezAniversario = hoje.getUTCMonth() > data.getUTCMonth()
+    || (hoje.getUTCMonth() === data.getUTCMonth() && hoje.getUTCDate() >= data.getUTCDate());
+  return fezAniversario ? idade : idade - 1;
+}
 
 // Valida (e normaliza) os dados de um usuário.
 //
@@ -147,6 +159,9 @@ function validarUsuario(corpo, opcoes = {}) {
     if (!data) return erro('data_nascimento', 'Data de nascimento inválida. Use uma data que exista (ex.: 1998-07-21).');
     if (data > new Date()) return erro('data_nascimento', 'A data de nascimento não pode ser no futuro.');
     if (data.getUTCFullYear() < new Date().getUTCFullYear() - 120) return erro('data_nascimento', 'Data de nascimento inválida: ano muito antigo.');
+    if (idadeEmAnos(data) < IDADE_MINIMA_CADASTRO) {
+      return erro('data_nascimento', `É preciso ter pelo menos ${IDADE_MINIMA_CADASTRO} anos para criar uma conta.`);
+    }
     dados.data_nascimento = data;
   }
 
@@ -213,4 +228,4 @@ async function buscarConflito(prisma, dados, ignorarId = null) {
   return null;
 }
 
-module.exports = { validarUsuario, buscarConflito, NIVEIS_ADMIN, UFS };
+module.exports = { validarUsuario, buscarConflito, NIVEIS_ADMIN, UFS, IDADE_MINIMA_CADASTRO };
