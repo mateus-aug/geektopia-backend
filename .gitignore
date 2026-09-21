@@ -8,3 +8,7 @@ postman
 
 /generated/prisma
 
+
+# Imagens enviadas pelos usuários NÃO ficam no Git (em produção vão para o Supabase Storage).
+src/uploads/*
+!src/uploads/.gitkeep

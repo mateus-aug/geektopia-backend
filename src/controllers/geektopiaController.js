@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { apagarArquivoLocal } = require('../utils/arquivos');
 const { Prisma } = require('@prisma/client');
 const { lerId, lerData, lerTexto } = require('../utils/validadores');
 
@@ -267,7 +268,7 @@ exports.criar = async (req, res) => {
     }
 
     if (req.file) {
-      dados.banner_url = `${req.protocol}://${req.get('host')}/uploads/eventos/${req.file.filename}`;
+      dados.banner_url = req.file.url;
     }
 
     const marcarPrincipal = req.body.tornar_principal === 'true';
@@ -492,12 +493,15 @@ exports.uploadBanner = async (req, res) => {
       return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
     }
 
-    const bannerUrl = `${req.protocol}://${req.get('host')}/uploads/eventos/${req.file.filename}`;
+    const bannerUrl = req.file.url;
+    const anterior = await prisma.geektopia.findUnique({ where: { id_geektopia: id }, select: { banner_url: true } });
 
     const atualizada = await prisma.geektopia.update({
       where: { id_geektopia: id },
       data: { banner_url: bannerUrl }
     });
+
+    if (anterior?.banner_url && anterior.banner_url !== bannerUrl) apagarArquivoLocal(anterior.banner_url);
 
     return res.json({ message: 'Foto do evento atualizada com sucesso!', geektopia: atualizada });
   } catch (error) {

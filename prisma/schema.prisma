@@ -123,6 +123,7 @@ model Usuario {
   pedidos            Pedido[]
   feedbacks          Feedback[]
   ingressos          Ingresso[]
+  notificacoes       Notificacao[]
 }
 
 model Responsavel {
@@ -494,6 +495,22 @@ model Inscricao_Competicao {
 }
 
 // ---------------- INSTITUCIONAL / SITE ----------------
+
+// Avisos dentro do site (sininho). Também servem de "caixa de saída" quando o e-mail não está configurado.
+model Notificacao {
+  id_notificacao Int      @id @default(autoincrement())
+  id_usuario     Int
+  tipo           String   @db.VarChar(40) // ex.: solicitacao_aprovada, pagamento_confirmado, ingresso_emitido
+  titulo         String   @db.VarChar(150)
+  texto          String?  @db.Text
+  link           String?  @db.VarChar(300) // caminho interno do site (ex.: /expositor/solicitacoes/3)
+  lida           Boolean  @default(false)
+  criada_em      DateTime @default(now())
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+
+  @@index([id_usuario, lida, criada_em])
+}
 
 // Textos editáveis pelo admin das páginas informativas (hoje só a landing page: chave "landing").
 model Conteudo_Site {

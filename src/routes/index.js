@@ -15,6 +15,7 @@ const ingressoRoutes = require('./ingressoRoutes');
 const convidadoRoutes = require('./convidadoRoutes');
 const fotoEdicaoRoutes = require('./fotoEdicaoRoutes');
 const conteudoRoutes = require('./conteudoRoutes');
+const notificacaoRoutes = require('./notificacaoRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
@@ -32,5 +33,6 @@ router.use('/ingressos', ingressoRoutes);
 router.use('/convidados', convidadoRoutes);
 router.use('/fotos-edicao', fotoEdicaoRoutes);
 router.use('/conteudo', conteudoRoutes);
+router.use('/notificacoes', notificacaoRoutes);
 
 module.exports = router;

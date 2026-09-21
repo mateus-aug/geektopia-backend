@@ -1,39 +1,51 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { salvarImagem } = require('../services/armazenamento');
+
+// Upload de imagem em duas etapas:
+//   1) multer recebe o arquivo NA MEMÓRIA (valida tipo e tamanho; nada vai para o disco ainda);
+//   2) `processar` redimensiona/comprime e guarda (disco local ou Supabase, conforme STORAGE_DRIVER).
+// Depois disso o controller enxerga:  req.file.url  (endereço final)  e  req.file.chave.
+// Os controllers já chamam `descartarUpload(req)` quando recusam a requisição depois do upload.
+
+const TIPOS = ['image/jpeg', 'image/png', 'image/webp'];
+const LIMITE = 4 * 1024 * 1024; // 4MB de entrada; o que fica guardado é bem menor (WebP redimensionado)
+
+// Confere pelo CONTEÚDO (bytes iniciais), não só pelo tipo que o navegador declarou.
+function pareceImagem(b) {
+  if (!b || b.length < 12) return false;
+  const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  const png = b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const webp = b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP';
+  return jpeg || png || webp;
+}
 
 function criarUploadMiddleware(pasta) {
-  const uploadDir = path.join(__dirname, '..', 'uploads', pasta);
-
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-      const extensao = path.extname(file.originalname);
-      const nomeUnico = `${pasta}-${Date.now()}-${Math.round(Math.random() * 1e9)}${extensao}`;
-      cb(null, nomeUnico);
-    }
+  const receber = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: (req, file, cb) => (TIPOS.includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Formato de arquivo não suportado. Envie uma imagem JPEG, PNG ou WEBP.'))),
+    limits: { fileSize: LIMITE, files: 1 }
   });
 
-  const fileFilter = (req, file, cb) => {
-    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
-    if (tiposPermitidos.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Formato de arquivo não suportado. Envie uma imagem JPEG, PNG ou WEBP.'));
+  const processar = async (req, res, next) => {
+    if (!req.file) return next();
+    try {
+      if (!pareceImagem(req.file.buffer)) {
+        return next(new Error('Formato de arquivo não suportado. Envie uma imagem JPEG, PNG ou WEBP.'));
+      }
+      const salvo = await salvarImagem(req.file.buffer, pasta, { origemLocal: `${req.protocol}://${req.get('host')}` });
+      req.file.url = salvo.url;
+      req.file.chave = salvo.chave;
+      req.file.buffer = undefined; // libera a memória
+      return next();
+    } catch (erro) {
+      console.error('Erro ao processar a imagem enviada:', erro.message);
+      return next(new Error('Formato de arquivo não suportado. A imagem parece corrompida.'));
     }
   };
 
-  return multer({
-    storage,
-    fileFilter,
-    limits: { fileSize: 4 * 1024 * 1024 } // 4MB (fotos de evento tendem a ser maiores que avatar)
-  });
+  return { single: (campo) => [receber.single(campo), processar] };
 }
 
 module.exports = {

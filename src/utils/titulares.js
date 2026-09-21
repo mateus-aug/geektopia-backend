@@ -37,7 +37,7 @@ function validarTitular(t, posicao) {
   }
   if (nasc > new Date()) return { erro: `${rotulo}: a data de nascimento não pode ser no futuro.` };
   const idade = idadeEmAnos(nasc);
-  if (idade > 120) return { erro: `${rotulo}: data de nascimento inválida.` };
+  if (idade > 110) return { erro: `${rotulo}: data de nascimento inválida.` };
 
   return { valor: { nome_completo: nome, tipo_documento: tipo, documento, data_nascimento: bruta, idade } };
 }

@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { notificar, notificarAdmins } = require('../services/notificacoes');
 const { lerId, lerTexto } = require('../utils/validadores');
 const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
 
@@ -142,7 +143,7 @@ exports.criar = async (req, res) => {
   try {
     const competidor = await prisma.competidor.findUnique({
       where: { id_usuario: req.userId },
-      select: { id_usuario: true }
+      select: { id_usuario: true, nickname_competidor: true }
     });
 
     if (!competidor) {
@@ -252,6 +253,12 @@ exports.criar = async (req, res) => {
         },
         include: INCLUIR
       });
+    });
+
+    notificarAdmins({
+      tipo: 'inscricao_nova', titulo: 'Nova inscrição em competição para analisar',
+      texto: `${competidor.nickname_competidor || 'Um competidor'} se inscreveu em ${nova.competicao?.nome_competicao || 'uma competição'}.`,
+      link: '/admin/solicitacoes?tipo=competicoes'
     });
 
     return res.status(201).json({
@@ -526,6 +533,22 @@ exports.alterarStatus = async (req, res) => {
       data: { status_inscricao, ...(observacao !== undefined && { observacao_admin: observacao || null }) },
       include: INCLUIR
     });
+
+    const nomeComp = atualizada.competicao?.nome_competicao || 'a competição';
+    const taxa = Number(atualizada.competicao?.valor_taxa_inscricao) || 0;
+    if (status_inscricao === 'Aprovado') {
+      notificar(atualizada.id_usuario, {
+        tipo: 'inscricao_aprovada', titulo: 'Sua inscrição foi aprovada!',
+        texto: `A organização aprovou a sua inscrição em ${nomeComp}.${taxa > 0 ? ' Pague a taxa para garantir a vaga.' : ' Sua vaga está confirmada.'}${observacao ? `\nRecado: ${observacao}` : ''}`,
+        link: '/competidor'
+      });
+    } else if (status_inscricao === 'Reprovado') {
+      notificar(atualizada.id_usuario, {
+        tipo: 'inscricao_reprovada', titulo: 'Sua inscrição não foi aprovada',
+        texto: `A organização não aprovou a sua inscrição em ${nomeComp}.${observacao ? `\nMotivo: ${observacao}` : ''}`,
+        link: '/competidor'
+      });
+    }
 
     return res.json({
       message: `Inscrição marcada como "${status_inscricao}".`,

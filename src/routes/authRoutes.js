@@ -7,15 +7,16 @@ const adminMiddleware = require('../middlewares/adminMiddleware');
 const uploadMiddleware = require('../middlewares/uploadMiddleware');
 
 // === ROTAS PÚBLICAS ===
-router.post('/register', authController.register);
-router.post('/login', authController.login);
+const limites = require('../middlewares/limites');
+router.post('/register', limites.cadastro, authController.register);
+router.post('/login', limites.login, authController.login);
 
 // === ROTAS DO CLIENTE LOGADO ===
 router.get('/me', authMiddleware, authController.getMe);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.patch('/change-password', authMiddleware, authController.changePassword);
 router.delete('/delete-account', authMiddleware, authController.deleteMyAccount);
-router.post('/upload-avatar', authMiddleware, uploadMiddleware.avatar.single('avatar'), authController.uploadAvatar);
+router.post('/upload-avatar', authMiddleware, require('../middlewares/limites').upload, uploadMiddleware.avatar.single('avatar'), authController.uploadAvatar);
 
 // === ROTAS PAINEL ADM (Requer ser Admin) ===
 router.get('/admin/users', authMiddleware, adminMiddleware, authController.getAllUsers);
