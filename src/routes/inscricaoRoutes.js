@@ -14,6 +14,7 @@ router.patch('/admin/:id/status', authMiddleware, adminMiddleware, inscricaoCont
 // Do competidor.
 router.post('/', authMiddleware, inscricaoController.criar);
 router.get('/minhas', authMiddleware, inscricaoController.listarMinhas);
+router.post('/:id/pagamento', authMiddleware, inscricaoController.gerarPagamento);
 router.get('/:id', authMiddleware, inscricaoController.buscarPorId);
 router.put('/:id', authMiddleware, inscricaoController.atualizar);
 router.delete('/:id', authMiddleware, inscricaoController.remover);

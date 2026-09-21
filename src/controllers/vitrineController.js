@@ -11,7 +11,7 @@ const STATUS_PUBLICOS = ['VendasAbertas', 'VendasEncerradas', 'Encerrado'];
 
 // Tetos de segurança, para uma edição não virar depósito de imagens.
 const MAX_CONVIDADOS = 50;
-const MAX_FOTOS = 40;
+const MAX_FOTOS = 12; // o carrossel público mostra poucas fotos, bem escolhidas
 
 // Confere se a edição existe e se o solicitante pode vê-la.
 // Devolve o mesmo 404 para "não existe" e "é rascunho", para não confirmar
@@ -415,38 +415,144 @@ exports.listarExpositoresConfirmados = async (req, res) => {
       return res.status(404).json({ error: 'Edição da Geektopia não encontrada.' });
     }
 
-    const solicitacoes = await prisma.solicitacao_Espaco.findMany({
-      where: {
-        id_geektopia: id,
-        status_solicitacao: 'Aprovado',
-        pedido: { is: { status_pedido: 'Pago' } }
-      },
-      select: {
-        id_solicitacao: true,
-        espaco: { select: { tipo_espaco: true } },
-        expositor: {
-          select: { nome_loja_projeto: true, tipo_expositor: true, url_portfolio: true, url_logo: true }
-        }
-      },
-      orderBy: { id_solicitacao: 'asc' }
-    });
-
-    // O link é digitado pelo expositor. Só passa http(s), para a vitrine
-    // nunca receber um "javascript:" num href.
-    const linkSeguro = (url) => (typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null);
-
-    const expositores = solicitacoes.map((s) => ({
-      id_solicitacao: s.id_solicitacao,
-      nome: s.expositor.nome_loja_projeto,
-      tipo: s.expositor.tipo_expositor,
-      tipo_espaco: s.espaco.tipo_espaco,
-      logo_url: s.expositor.url_logo,
-      link: linkSeguro(s.expositor.url_portfolio)
-    }));
+    const expositores = await expositoresConfirmadosDe(id);
 
     return res.json(expositores);
   } catch (error) {
     console.error('Erro ao listar expositores confirmados:', error);
     return res.status(500).json({ error: 'Erro ao listar os expositores confirmados.' });
+  }
+};
+
+// ==========================================================================
+// VITRINE PÚBLICA (página /geektopia)
+// ==========================================================================
+
+// Expositores confirmados de uma edição (aprovado + taxa paga). Só o que é
+// feito para o público; nunca dados pessoais.
+async function expositoresConfirmadosDe(idGeektopia) {
+  const solicitacoes = await prisma.solicitacao_Espaco.findMany({
+    where: { id_geektopia: idGeektopia, status_solicitacao: 'Aprovado', pedido: { is: { status_pedido: 'Pago' } } },
+    select: {
+      id_solicitacao: true,
+      espaco: { select: { tipo_espaco: true } },
+      expositor: { select: { nome_loja_projeto: true, tipo_expositor: true, url_portfolio: true, url_logo: true } }
+    },
+    orderBy: { id_solicitacao: 'asc' }
+  });
+
+  return solicitacoes.map((s) => ({
+    id_solicitacao: s.id_solicitacao,
+    nome: s.expositor.nome_loja_projeto,
+    tipo: s.expositor.tipo_expositor,
+    tipo_espaco: s.espaco.tipo_espaco,
+    logo_url: s.expositor.url_logo,
+    link: /^https?:\/\//i.test(s.expositor.url_portfolio || '') ? s.expositor.url_portfolio : null
+  }));
+}
+
+// Resumo de preço/disponibilidade dos lotes de várias edições, numa consulta só.
+// `restantes` segue a mesma conta do pedido: capacidade menos ingressos emitidos.
+async function resumoDeIngressos(idsGeektopia) {
+  const lotes = await prisma.lote.findMany({
+    where: { id_geektopia: { in: idsGeektopia } },
+    select: { id_geektopia: true, valor_ingresso: true, quantidade_total: true, _count: { select: { ingressos: true } } }
+  });
+
+  const porEdicao = new Map(idsGeektopia.map((id) => [id, { qtd_lotes: 0, preco_a_partir: null, esgotado: false }]));
+
+  for (const l of lotes) {
+    const r = porEdicao.get(l.id_geektopia);
+    r.qtd_lotes += 1;
+    const restantes = l.quantidade_total === null ? Infinity : l.quantidade_total - l._count.ingressos;
+    if (restantes > 0) {
+      const valor = Number(l.valor_ingresso);
+      if (r.preco_a_partir === null || valor < r.preco_a_partir) r.preco_a_partir = valor;
+    }
+  }
+  for (const r of porEdicao.values()) r.esgotado = r.qtd_lotes > 0 && r.preco_a_partir === null;
+
+  return porEdicao;
+}
+
+// GET /api/geektopia/vitrine
+//
+// Tudo o que a página pública precisa, numa chamada só:
+//   destaque  a Principal vigente; enquanto ela não for publicada, a
+//             Principal anterior mais recente (a página nunca fica vazia)
+//   galeria   fotos das Principais anteriores (limitadas)
+//   pockets   as edições menores publicadas, já com preço "a partir de"
+// Rascunhos nunca aparecem.
+exports.vitrinePublica = async (req, res) => {
+  try {
+    const publicas = { status_evento: { in: STATUS_PUBLICOS } };
+    const maisRecente = { data_inicio: { sort: 'desc', nulls: 'last' } };
+
+    // Sem Principal publicada não há destaque: a página mostra "próxima edição em <ano>".
+    // (A edição anterior alimenta só a galeria; não é apresentada como se fosse a atual.)
+    const edicao = await prisma.geektopia.findFirst({ where: { ...publicas, tipo_edicao: 'Principal' } });
+    const origem = 'Principal';
+
+    const anterior = edicao ? null : await prisma.geektopia.findFirst({
+      where: { ...publicas, tipo_edicao: 'PrincipalAnterior' },
+      orderBy: maisRecente,
+      select: { nome_edicao: true, data_inicio: true }
+    });
+    const anoAnterior = anterior?.data_inicio ? new Date(anterior.data_inicio).getUTCFullYear() : 0;
+    const proximaEdicaoAno = Math.max(new Date().getFullYear(), anoAnterior) + 1;
+
+    const pockets = await prisma.geektopia.findMany({
+      where: { ...publicas, tipo_edicao: 'Pocket' },
+      select: {
+        id_geektopia: true, nome_edicao: true, data_inicio: true, data_fim: true, local: true,
+        banner_url: true, status_evento: true, classificacao_etaria: true, tagline: true, cor_destaque: true
+      },
+      orderBy: maisRecente
+    });
+
+    const idsParaResumo = [...pockets.map((p) => p.id_geektopia), ...(edicao ? [edicao.id_geektopia] : [])];
+    const resumos = await resumoDeIngressos(idsParaResumo);
+
+    const fotos = await prisma.foto_Edicao.findMany({
+      where: { geektopia: { ...publicas, tipo_edicao: 'PrincipalAnterior' } },
+      select: { id_foto: true, url_foto: true, legenda: true, geektopia: { select: { nome_edicao: true } } },
+      orderBy: [{ geektopia: maisRecente }, { ordem: 'asc' }, { id_foto: 'asc' }],
+      take: MAX_FOTOS
+    });
+
+    let destaque = null;
+    if (edicao) {
+      const [convidados, expositores, competicoes] = await Promise.all([
+        prisma.convidado.findMany({ where: { id_geektopia: edicao.id_geektopia }, orderBy: [{ ordem: 'asc' }, { id_convidado: 'asc' }] }),
+        expositoresConfirmadosDe(edicao.id_geektopia),
+        prisma.competicao.findMany({
+          where: { id_geektopia: edicao.id_geektopia },
+          select: { id_competicao: true, nome_competicao: true, modalidade: true, valor_taxa_inscricao: true, descricao: true },
+          orderBy: { nome_competicao: 'asc' }
+        })
+      ]);
+
+      destaque = {
+        ...edicao,
+        origem,
+        ingressos: resumos.get(edicao.id_geektopia),
+        convidados,
+        expositores,
+        competicoes: competicoes.map((c) => ({
+          ...c,
+          valor_taxa_inscricao: c.valor_taxa_inscricao === null ? null : Number(c.valor_taxa_inscricao)
+        }))
+      };
+    }
+
+    return res.json({
+      destaque,
+      proxima_edicao_ano: destaque ? null : proximaEdicaoAno,
+      galeria: fotos.map((f) => ({ id_foto: f.id_foto, url_foto: f.url_foto, legenda: f.legenda, edicao: f.geektopia.nome_edicao })),
+      pockets: pockets.map((p) => ({ ...p, ingressos: resumos.get(p.id_geektopia) }))
+    });
+  } catch (error) {
+    console.error('Erro ao montar a vitrine pública:', error);
+    return res.status(500).json({ error: 'Erro ao carregar a página da Geektopia.' });
   }
 };

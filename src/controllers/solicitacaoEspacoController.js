@@ -1,7 +1,6 @@
-const { Preference } = require('mercadopago');
 const prisma = require('../config/prisma');
 const { lerId, lerTexto } = require('../utils/validadores');
-const { client, baseUrl, frontendUrl } = require('../services/paymentService');
+const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
 
 // Valores aceitos pelo enum StatusAprovacaoEnum do schema.prisma.
 const STATUS_VALIDOS = ['EmAnalise', 'Aprovado', 'Reprovado'];
@@ -680,88 +679,25 @@ exports.gerarPagamento = async (req, res) => {
       return res.status(409).json({ error: 'Esta solicitação não tem um valor definido para cobrança.' });
     }
 
-    // Um pedido por solicitação. Se já existe e ainda está pendente, o expositor
-    // está RETOMANDO o pagamento (perdeu a aba do Mercado Pago, o link expirou):
-    // reaproveitamos o pedido e geramos uma nova preferência de pagamento para ele.
-    let novoPedido;
-
-    if (solicitacao.id_pedido !== null) {
-      novoPedido = await prisma.pedido.findUnique({ where: { id_pedido: solicitacao.id_pedido } });
-
-      if (novoPedido.status_pedido === 'Pago') {
-        return res.status(409).json({
-          error: 'A taxa desta solicitação já foi paga.',
-          id_pedido: novoPedido.id_pedido
-        });
-      }
-
-      if (novoPedido.status_pedido !== 'Pendente') {
-        return res.status(409).json({
-          error: 'A cobrança anterior desta solicitação foi encerrada. Entre em contato com a organização.',
-          id_pedido: novoPedido.id_pedido
-        });
-      }
-    } else {
-      // Duas requisições simultâneas (duplo clique) não podem criar dois pedidos:
-      // o vínculo só é gravado se a solicitação ainda estiver sem pedido.
-      novoPedido = await prisma.$transaction(async (tx) => {
-        const criado = await tx.pedido.create({
-          data: {
-            id_usuario: req.userId,
-            valor_total_bruto: valor,
-            status_pedido: 'Pendente',
-            pagamento: { create: { valor_total: valor, status_pagamento: 'Pendente' } }
-          }
-        });
-
-        const vinculo = await tx.solicitacao_Espaco.updateMany({
-          where: { id_solicitacao: id, id_pedido: null },
-          data: { id_pedido: criado.id_pedido }
-        });
-
-        if (vinculo.count === 0) {
-          throw new Error('COBRANCA_JA_GERADA'); // desfaz o pedido recém-criado
-        }
-        return criado;
-      }).catch((e) => {
-        if (e.message === 'COBRANCA_JA_GERADA') return null;
-        throw e;
-      });
-
-      if (!novoPedido) {
-        return res.status(409).json({ error: 'Esta solicitação já tem uma cobrança em andamento. Atualize a página.' });
-      }
-    }
-
-    const confirmacaoUrl = `${frontendUrl()}/pedido/${novoPedido.id_pedido}/confirmacao`;
-
-    const preference = new Preference(client);
-    const result = await preference.create({
-      body: {
-        items: [
-          {
-            title: `Taxa de espaço — ${solicitacao.espaco.tipo_espaco || 'Expositor'}`,
-            unit_price: valor,
-            quantity: 1,
-            currency_id: 'BRL'
-          }
-        ],
-        external_reference: JSON.stringify({ id_pedido: novoPedido.id_pedido }),
-        notification_url: `${baseUrl()}/api/pedidos/webhook`,
-        back_urls: {
-          success: confirmacaoUrl,
-          failure: confirmacaoUrl,
-          pending: confirmacaoUrl
-        }
-        // Sem auto_return: exige HTTPS no back_url, e assim evitamos depender
-        // do ngrok pra essa parte (só o webhook ainda depende dele).
-      }
+    const r = await gerarOuRetomarCobranca({
+      idUsuario: req.userId,
+      valor,
+      titulo: `Taxa de espaço — ${solicitacao.espaco.tipo_espaco || 'Expositor'}`,
+      pedidoAtual: solicitacao.id_pedido !== null
+        ? await prisma.pedido.findUnique({ where: { id_pedido: solicitacao.id_pedido }, select: { id_pedido: true, status_pedido: true } })
+        : null,
+      vincular: (tx, idPedido) => tx.solicitacao_Espaco.updateMany({
+        where: { id_solicitacao: id, id_pedido: null },
+        data: { id_pedido: idPedido }
+      })
     });
 
+    if (r.erro) return res.status(r.status).json({ error: r.erro, id_pedido: r.id_pedido });
+
     return res.status(201).json({
-      message: solicitacao.id_pedido !== null ? 'Pagamento retomado.' : 'Cobrança gerada com sucesso!',
-      id_pedido: novoPedido.id_pedido,
-      init_point: result.init_point
+      message: r.retomado ? 'Pagamento retomado.' : 'Cobrança gerada com sucesso!',
+      id_pedido: r.id_pedido,
+      init_point: r.init_point
     });
   } catch (error) {
     console.error('Erro ao gerar pagamento da solicitação de espaço:', error);
