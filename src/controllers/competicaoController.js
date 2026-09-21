@@ -83,6 +83,15 @@ function validarDados(corpo, ehCriacao) {
     }
   }
 
+  // Texto livre: vazio ou null limpa; passar do limite é erro (não some em silêncio).
+  if (corpo.descricao !== undefined) {
+    const texto = typeof corpo.descricao === 'string' ? corpo.descricao.trim() : '';
+    if (texto.length > 5000) {
+      return { erro: 'O campo "descricao" deve ter no máximo 5000 caracteres.' };
+    }
+    dados.descricao = texto === '' ? null : texto;
+  }
+
   if (corpo.regras_url !== undefined) {
     dados.regras_url = corpo.regras_url === null ? null : lerTexto(corpo.regras_url, 2000);
   }
@@ -159,7 +168,7 @@ exports.buscarPorId = async (req, res) => {
 };
 
 // POST /api/competicoes - cadastra uma competição numa edição
-// Corpo: { id_geektopia, nome_competicao, modalidade?, valor_taxa_inscricao?, regras_url? }
+// Corpo: { id_geektopia, nome_competicao, modalidade?, valor_taxa_inscricao?, descricao?, regras_url? }
 exports.criar = async (req, res) => {
   try {
     // Quadro 43 - "Impedir competição sem Geektopia vinculada".
