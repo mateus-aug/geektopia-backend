@@ -158,4 +158,90 @@ exports.sugestoes = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------------- PÁGINA GEEKTOPIA
+// Textos gerais da página /geektopia. Não dependem de nenhuma edição: criar um novo evento não os altera.
+const PADRAO_GEEKTOPIA = {
+  sobre: {
+    titulo: 'Sobre a Geektopia',
+    texto: 'A Geektopia é o encontro da cultura geek, nerd e pop de Ponta Grossa. Reúne games, animes, quadrinhos, música, cosplay, competições e uma feira de artistas e lojas, organizada pelo CCPOP com a comunidade.\n\nA cada edição, novos convidados, competições e expositores. Aqui você acompanha as novidades e garante o seu lugar.',
+    destaques: []
+  },
+  galeria: { titulo: 'Galeria de fotos', texto: 'Um gostinho do que já rolou na Geektopia. Arraste ou use as setas.' },
+  participar: { titulo: 'Como você quer participar?', texto: 'Escolha o seu papel na Geektopia. Você pode ser mais de um.' }
+};
+const CHAVE_GEEKTOPIA = 'geektopia';
+
+function combinarGeektopia(salvo) {
+  const s = salvo && typeof salvo === 'object' ? salvo : {};
+  return {
+    sobre: { ...PADRAO_GEEKTOPIA.sobre, ...(s.sobre || {}), destaques: Array.isArray(s.sobre?.destaques) ? s.sobre.destaques : PADRAO_GEEKTOPIA.sobre.destaques },
+    galeria: { ...PADRAO_GEEKTOPIA.galeria, ...(s.galeria || {}) },
+    participar: { ...PADRAO_GEEKTOPIA.participar, ...(s.participar || {}) }
+  };
+}
+
+async function conteudoGeektopia() {
+  const reg = await prisma.conteudo_Site.findUnique({ where: { chave: CHAVE_GEEKTOPIA } });
+  return combinarGeektopia(reg?.valor);
+}
+
+function validarGeektopia(corpo) {
+  const saida = {};
+  const s = corpo.sobre || {};
+  const t = texto(s.titulo, 80, 'sobre.titulo'); if (t.erro) return { erro: t.erro };
+  const x = texto(s.texto, 3000, 'sobre.texto'); if (x.erro) return { erro: x.erro };
+  if (!Array.isArray(s.destaques) || s.destaques.length > 4) return { erro: 'Os destaques aceitam no máximo 4 itens.' };
+  const destaques = [];
+  for (const [i, d] of s.destaques.entries()) {
+    const dt = texto(d?.titulo, 60, `sobre.destaques[${i + 1}].titulo`); if (dt.erro) return { erro: dt.erro };
+    const dd = texto(d?.descricao, 160, `sobre.destaques[${i + 1}].descricao`, { obrigatorio: false }); if (dd.erro) return { erro: dd.erro };
+    destaques.push({ titulo: dt.valor, descricao: dd.valor });
+  }
+  saida.sobre = { titulo: t.valor, texto: x.valor, destaques };
+
+  for (const [chave, maxT, maxX] of [['galeria', 80, 200], ['participar', 80, 200]]) {
+    const c = corpo[chave] || {};
+    const ct = texto(c.titulo, maxT, `${chave}.titulo`); if (ct.erro) return { erro: ct.erro };
+    const cx = texto(c.texto, maxX, `${chave}.texto`, { obrigatorio: false }); if (cx.erro) return { erro: cx.erro };
+    saida[chave] = { titulo: ct.valor, texto: cx.valor };
+  }
+  return { valor: saida };
+}
+
+// GET /api/conteudo/geektopia — público
+exports.buscarGeektopia = async (req, res) => {
+  try {
+    const reg = await prisma.conteudo_Site.findUnique({ where: { chave: CHAVE_GEEKTOPIA } });
+    return res.json({ ...combinarGeektopia(reg?.valor), personalizado: Boolean(reg) });
+  } catch (error) {
+    console.error('Erro ao buscar o conteúdo da página Geektopia:', error);
+    return res.status(500).json({ error: 'Erro ao carregar o conteúdo da página.' });
+  }
+};
+
+// PUT /api/conteudo/geektopia — admin
+exports.salvarGeektopia = async (req, res) => {
+  try {
+    const { erro, valor } = validarGeektopia(req.body || {});
+    if (erro) return res.status(400).json({ error: erro });
+    const reg = await prisma.conteudo_Site.upsert({ where: { chave: CHAVE_GEEKTOPIA }, create: { chave: CHAVE_GEEKTOPIA, valor }, update: { valor, atualizado_em: new Date() } });
+    return res.json({ message: 'Página atualizada!', ...combinarGeektopia(reg.valor), personalizado: true });
+  } catch (error) {
+    console.error('Erro ao salvar o conteúdo da página Geektopia:', error);
+    return res.status(500).json({ error: 'Erro ao salvar o conteúdo da página.' });
+  }
+};
+
+// DELETE /api/conteudo/geektopia — admin: volta ao texto padrão
+exports.restaurarGeektopia = async (req, res) => {
+  try {
+    await prisma.conteudo_Site.deleteMany({ where: { chave: CHAVE_GEEKTOPIA } });
+    return res.json({ message: 'Textos padrão restaurados.', ...combinarGeektopia(null), personalizado: false });
+  } catch (error) {
+    console.error('Erro ao restaurar o conteúdo da página Geektopia:', error);
+    return res.status(500).json({ error: 'Erro ao restaurar os textos.' });
+  }
+};
+
+exports.conteudoGeektopia = conteudoGeektopia;
 exports.PADRAO = PADRAO;

@@ -10,6 +10,9 @@ router.get('/landing', conteudoController.buscarLanding);
 // Administrativas.
 router.put('/landing', authMiddleware, adminMiddleware, conteudoController.salvarLanding);
 router.delete('/landing', authMiddleware, adminMiddleware, conteudoController.restaurarLanding);
+router.get('/geektopia', conteudoController.buscarGeektopia);
+router.put('/geektopia', authMiddleware, adminMiddleware, conteudoController.salvarGeektopia);
+router.delete('/geektopia', authMiddleware, adminMiddleware, conteudoController.restaurarGeektopia);
 router.get('/sugestoes', authMiddleware, adminMiddleware, conteudoController.sugestoes);
 
 module.exports = router;
