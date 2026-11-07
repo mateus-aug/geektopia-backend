@@ -6,6 +6,7 @@ const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
 const { validarGenero, validarSexualidade } = require('../utils/genero');
 const { VERSAO_TERMOS } = require('../utils/termos');
+const { contarVinculos } = require('../utils/vinculosUsuario');
 
 // ===================================================
 // 1. AUTENTICAÇÃO E CADASTRO
@@ -203,12 +204,33 @@ exports.changePassword = async (req, res) => {
 // Excluir conta própria
 exports.deleteMyAccount = async (req, res) => {
   try {
+    // Conta com histórico não é apagada: isso destruiria registro financeiro e
+    // lista de presença do evento. Conferimos ANTES para responder 409 dizendo
+    // o que está no caminho — sem isso, a chave estrangeira estoura no meio da
+    // operação e a pessoa recebe um 500 sem explicação.
+    const vinculos = await contarVinculos(req.userId);
+
+    if (vinculos.total > 0) {
+      return res.status(409).json({
+        error:
+          'Não é possível excluir a sua conta porque existe histórico vinculado a ela: ' +
+          vinculos.resumo +
+          '. Fale com a organização do CCPOP para solicitar a desativação.',
+        vinculos: vinculos.detalhes
+      });
+    }
+
     await prisma.usuario.delete({
       where: { id_usuario: req.userId }
     });
 
     return res.json({ message: 'Sua conta foi excluída com sucesso.' });
   } catch (error) {
+    // Rede de segurança: se algum vínculo novo surgir entre a contagem e o
+    // delete, o banco barra e devolvemos 409 em vez de 500.
+    if (error.code === 'P2003') {
+      return res.status(409).json({ error: 'Não é possível excluir: existem registros vinculados à sua conta.' });
+    }
     console.error('Erro ao excluir conta:', error);
     return res.status(500).json({ error: 'Erro ao encerrar conta de usuário.' });
   }
@@ -407,6 +429,19 @@ exports.adminDeleteUser = async (req, res) => {
 
     if (id === req.userId) {
       return res.status(409).json({ error: 'Você não pode excluir a sua própria conta por aqui.' });
+    }
+
+    // Mesma trava da conta própria: conferir antes permite dizer o que impede,
+    // em vez de devolver um P2003 genérico depois que o banco recusa.
+    const vinculos = await contarVinculos(id);
+
+    if (vinculos.total > 0) {
+      return res.status(409).json({
+        error:
+          'Não é possível excluir este usuário porque existe histórico vinculado a ele: ' +
+          vinculos.resumo + '.',
+        vinculos: vinculos.detalhes
+      });
     }
 
     await prisma.usuario.delete({ where: { id_usuario: id } });
