@@ -19,6 +19,7 @@ const notificacaoRoutes = require('./notificacaoRoutes');
 const eventoComunidadeRoutes = require('./eventoComunidadeRoutes');
 const relatorioRoutes = require('./relatorioRoutes');
 const fotoSiteRoutes = require('./fotoSiteRoutes');
+const ajudaRoutes = require('./ajudaRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
@@ -40,5 +41,6 @@ router.use('/notificacoes', notificacaoRoutes);
 router.use('/eventos-comunidade', eventoComunidadeRoutes);
 router.use('/relatorios', relatorioRoutes);
 router.use('/fotos-site', fotoSiteRoutes);
+router.use('/ajuda', ajudaRoutes); // Sistema de Ajuda (conteudo estatico, nao usa banco)
 
 module.exports = router;
