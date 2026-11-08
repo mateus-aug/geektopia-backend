@@ -20,9 +20,14 @@ const eventoComunidadeRoutes = require('./eventoComunidadeRoutes');
 const relatorioRoutes = require('./relatorioRoutes');
 const fotoSiteRoutes = require('./fotoSiteRoutes');
 const ajudaRoutes = require('./ajudaRoutes');
+const recuperacaoSenhaRoutes = require('./recuperacaoSenhaRoutes');
 
 // Agrupa todas as rotas sob o prefixo correto
 router.use('/auth', authRoutes);
+// Segundo roteador no MESMO prefixo: acrescenta /forgot-password e /reset-password
+// em /api/auth sem precisar editar authRoutes.js. O Express tenta um roteador
+// depois do outro; o que nao casa aqui cai no de cima e vice-versa.
+router.use('/auth', recuperacaoSenhaRoutes);
 router.use('/geektopia', geektopiaRoutes);
 router.use('/lotes', loteRoutes);
 router.use('/programacao', programacaoRoutes);
