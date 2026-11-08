@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { lerId, lerTexto, lerLink } = require('../utils/validadores');
 const { urlDoUpload, apagarArquivoLocal, descartarUpload } = require('../utils/arquivos');
+const { notificar } = require('../services/notificacoes');
 
 // Perfis de parceiro do evento. O cadastro (authController) cria só o
 // Usuario; é aqui que o usuário logado assume um papel a mais:
@@ -256,6 +257,23 @@ exports.alterarStatusExpositor = async (req, res) => {
       data: { status_aprovacao },
       include: { usuario: RESUMO_USUARIO }
     });
+
+    // Avisa o expositor da decisão, no sininho e por e-mail. Sem isso a pessoa
+    // só descobre que foi aprovada se voltar ao site por conta própria.
+    // notificar() nunca derruba quem chamou: falha de envio vira log.
+    if (status_aprovacao !== 'EmAnalise') {
+      const aprovado = status_aprovacao === 'Aprovado';
+      notificar(id, {
+        tipo: 'expositor',
+        titulo: aprovado
+          ? 'Seu cadastro de expositor foi aprovado'
+          : 'Seu cadastro de expositor não foi aprovado',
+        texto: aprovado
+          ? 'A diretoria do CCPOP aprovou o seu perfil de expositor. Agora você já pode solicitar um espaço na próxima Geektopia.'
+          : 'A diretoria analisou o seu perfil de expositor e ele não foi aprovado desta vez. Entre em contato com a organização para saber mais.',
+        link: '/expositor'
+      });
+    }
 
     return res.json({
       message: `Expositor marcado como "${status_aprovacao}".`,
