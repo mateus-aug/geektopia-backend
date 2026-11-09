@@ -116,6 +116,8 @@ model Usuario {
   // Soft delete: conta inativada não entra mais, mas o histórico (pedidos, ingressos, inscrições) continua guardado.
   inativado_em      DateTime?
   inativado_motivo  String?   @db.VarChar(200)
+  // E-mail confirmado pelo link enviado: só endereços confirmados recebem e-mails e avisos.
+  email_confirmado_em DateTime?
 
   // Relacionamentos
   responsavel        Responsavel?         @relation(fields: [id_responsavel], references: [id_responsavel])

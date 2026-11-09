@@ -21,6 +21,7 @@ function obterTransporte() {
 // O botão diz o que acontece ao clicar. Cada tipo de link tem o seu texto; os demais usam "Abrir no site".
 function rotuloBotao(link) {
   if (String(link || '').startsWith('/redefinir-senha')) return 'Criar nova senha';
+  if (String(link || '').startsWith('/confirmar-email')) return 'Confirmar meu e-mail';
   return 'Abrir no site';
 }
 
