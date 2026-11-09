@@ -113,6 +113,9 @@ model Usuario {
   data_cadastro     DateTime  @default(now())
   termos_aceitos_em DateTime?
   termos_versao     String?   @db.VarChar(20)
+  // Soft delete: conta inativada não entra mais, mas o histórico (pedidos, ingressos, inscrições) continua guardado.
+  inativado_em      DateTime?
+  inativado_motivo  String?   @db.VarChar(200)
 
   // Relacionamentos
   responsavel        Responsavel?         @relation(fields: [id_responsavel], references: [id_responsavel])

@@ -34,7 +34,11 @@ const ROTULOS = {
   inscricoes: ['inscrição em competição', 'inscrições em competições'],
   equipes_lideradas: ['equipe liderada', 'equipes lideradas'],
   solicitacoes_espaco: ['solicitação de espaço', 'solicitações de espaço'],
-  eventos_comunidade: ['evento da comunidade', 'eventos da comunidade']
+  eventos_comunidade: ['evento da comunidade', 'eventos da comunidade'],
+  // Perfis de participação: têm portfólio, nickname e análise da diretoria. Contam como atividade mesmo sem inscrição.
+  perfil_expositor: ['perfil de expositor', 'perfis de expositor'],
+  perfil_competidor: ['perfil de competidor', 'perfis de competidor'],
+  perfil_organizador: ['perfil de organizador de eventos', 'perfis de organizador de eventos']
 };
 
 /**
@@ -55,7 +59,10 @@ async function contarVinculos(idUsuario) {
     inscricoes,
     equipesLideradas,
     solicitacoes,
-    eventos
+    eventos,
+    perfilExpositor,
+    perfilCompetidor,
+    perfilOrganizador
   ] = await Promise.all([
     prisma.pedido.count({ where: { id_usuario: idUsuario } }),
     prisma.ingresso.count({ where: { id_usuario: idUsuario } }),
@@ -65,7 +72,10 @@ async function contarVinculos(idUsuario) {
     prisma.inscricao_Competicao.count({ where: { id_usuario: idUsuario } }),
     prisma.equipe_Competicao.count({ where: { id_lider: idUsuario } }),
     prisma.solicitacao_Espaco.count({ where: { id_usuario: idUsuario } }),
-    prisma.evento_Externo.count({ where: { id_organizador: idUsuario } })
+    prisma.evento_Externo.count({ where: { id_organizador: idUsuario } }),
+    prisma.expositor.count({ where: { id_usuario: idUsuario } }),
+    prisma.competidor.count({ where: { id_usuario: idUsuario } }),
+    prisma.organizador_Externo.count({ where: { id_usuario: idUsuario } })
   ]);
 
   const bruto = {
@@ -76,7 +86,10 @@ async function contarVinculos(idUsuario) {
     inscricoes,
     equipes_lideradas: equipesLideradas,
     solicitacoes_espaco: solicitacoes,
-    eventos_comunidade: eventos
+    eventos_comunidade: eventos,
+    perfil_expositor: perfilExpositor,
+    perfil_competidor: perfilCompetidor,
+    perfil_organizador: perfilOrganizador
   };
 
   // Só o que existe entra no detalhe — devolver uma pilha de zeros não ajuda ninguém.
@@ -103,4 +116,25 @@ async function contarVinculos(idUsuario) {
   return { total, detalhes, resumo };
 }
 
-module.exports = { contarVinculos };
+/**
+ * Quais destes usuários têm alguma atividade? Uma consulta por tipo para a lista inteira (e não oito por pessoa),
+ * usada na lista do painel para esconder "Excluir" de quem só pode ser inativado.
+ *
+ * @param {number[]} ids
+ * @returns {Promise<Set<number>>} ids com pelo menos uma atividade
+ */
+async function usuariosComAtividade(ids) {
+  if (ids.length === 0) return new Set();
+  const por = (modelo, campo) => prisma[modelo].findMany({ where: { [campo]: { in: ids } }, select: { [campo]: true }, distinct: [campo] });
+  const listas = await Promise.all([
+    por('pedido', 'id_usuario'), por('ingresso', 'id_usuario'), por('credencial', 'id_usuario'), por('feedback', 'id_usuario'),
+    por('inscricao_Competicao', 'id_usuario'), por('equipe_Competicao', 'id_lider'), por('solicitacao_Espaco', 'id_usuario'),
+    por('evento_Externo', 'id_organizador'), por('expositor', 'id_usuario'), por('competidor', 'id_usuario'), por('organizador_Externo', 'id_usuario')
+  ]);
+  const campos = ['id_usuario', 'id_usuario', 'id_usuario', 'id_usuario', 'id_usuario', 'id_lider', 'id_usuario', 'id_organizador', 'id_usuario', 'id_usuario', 'id_usuario'];
+  const com = new Set();
+  listas.forEach((linhas, i) => linhas.forEach((l) => com.add(l[campos[i]])));
+  return com;
+}
+
+module.exports = { contarVinculos, usuariosComAtividade };

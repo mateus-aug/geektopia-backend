@@ -30,6 +30,18 @@ module.exports = async (req, res, next) => {
   // Só consulta quando o token diz que é admin: para o público comum (a imensa
   // maioria das requisições) o custo continua zero. Quem é promovido precisa
   // entrar de novo para o token novo trazer a permissão — o lado seguro.
+  // Conta inativada (soft delete) não usa mais o site, mesmo com token ainda dentro do prazo.
+  // Só bloqueia quando a conta existe: token de conta já apagada segue para o controller, que responde 404.
+  try {
+    const conta = await prisma.usuario.findUnique({ where: { id_usuario: decoded.id }, select: { inativado_em: true } });
+    if (conta?.inativado_em) {
+      return res.status(403).json({ error: 'Esta conta foi inativada. Fale com a organização do CCPOP para reativá-la.', inativa: true });
+    }
+  } catch (erro) {
+    console.error('Erro ao conferir a situação da conta:', erro);
+    return res.status(503).json({ error: 'Não foi possível confirmar a sua sessão agora. Tente de novo em instantes.' });
+  }
+
   if (decoded.isAdmin === true) {
     try {
       const admin = await prisma.administrador.findUnique({

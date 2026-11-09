@@ -54,10 +54,11 @@ exports.solicitar = async (req, res) => {
     // o login recusaria o mesmo e-mail escrito de outro jeito.
     const usuario = await prisma.usuario.findUnique({
       where: { email },
-      select: { id_usuario: true, senha: true, email: true, nome_completo: true }
+      select: { id_usuario: true, senha: true, email: true, nome_completo: true, inativado_em: true }
     });
 
-    if (usuario) {
+    // Conta inativada não recebe o link (a resposta continua igual, para não revelar nada).
+    if (usuario && !usuario.inativado_em) {
       const token = gerarToken(usuario);
       const caminho = `/redefinir-senha?token=${encodeURIComponent(token)}`;
       const primeiroNome = usuario.nome_completo.split(' ')[0];

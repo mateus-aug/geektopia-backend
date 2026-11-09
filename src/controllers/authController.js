@@ -6,7 +6,7 @@ const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
 const { validarGenero, validarSexualidade } = require('../utils/genero');
 const { VERSAO_TERMOS } = require('../utils/termos');
-const { contarVinculos } = require('../utils/vinculosUsuario');
+const { contarVinculos, usuariosComAtividade } = require('../utils/vinculosUsuario');
 const { lerId } = require('../utils/validadores');
 
 // ===================================================
@@ -87,6 +87,11 @@ exports.login = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // A senha é conferida antes: quem erra a senha não descobre se a conta existe ou está inativada.
+    if (user.inativado_em) {
+      return res.status(403).json({ error: 'Esta conta foi inativada. Fale com a organização do CCPOP para reativá-la.', inativa: true });
+    }
 
     delete user.senha;
 
@@ -232,38 +237,39 @@ exports.changePassword = async (req, res) => {
 // Excluir conta própria
 exports.deleteMyAccount = async (req, res) => {
   try {
-    // Conta com histórico não é apagada: isso destruiria registro financeiro e
-    // lista de presença do evento. Conferimos ANTES para responder 409 dizendo
-    // o que está no caminho — sem isso, a chave estrangeira estoura no meio da
-    // operação e a pessoa recebe um 500 sem explicação.
+    const usuario = await prisma.usuario.findUnique({ where: { id_usuario: req.userId }, select: { senha: true } });
+    if (!usuario) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    // Ação sem volta para quem não tem histórico, e que tira o acesso de quem tem: pede a senha de novo.
+    const senhaOk = typeof req.body?.senha === 'string' && await bcrypt.compare(req.body.senha, usuario.senha);
+    if (!senhaOk) return res.status(403).json({ error: 'Confirme a sua senha para encerrar a conta.', campo: 'senha' });
+
     const vinculos = await contarVinculos(req.userId);
 
+    // Conta com atividade (pedido, ingresso, inscrição, solicitação...) NUNCA é apagada: o histórico financeiro e a
+    // lista de presença precisam ficar guardados. Ela é INATIVADA (soft delete): para de entrar, e o admin pode reativar.
     if (vinculos.total > 0) {
-      return res.status(409).json({
-        error:
-          'Não é possível excluir a sua conta porque existe histórico vinculado a ela: ' +
-          vinculos.resumo +
-          '. Fale com a organização do CCPOP para solicitar a desativação.',
+      await prisma.usuario.update({ where: { id_usuario: req.userId }, data: { inativado_em: new Date(), inativado_motivo: 'Encerrada pela própria pessoa' } });
+      return res.json({
+        message: 'Sua conta foi inativada. Os dados ficam guardados e você pode pedir a reativação à organização do CCPOP.',
+        inativada: true,
         vinculos: vinculos.detalhes
       });
     }
 
-    await prisma.usuario.delete({
-      where: { id_usuario: req.userId }
-    });
-
-    return res.json({ message: 'Sua conta foi excluída com sucesso.' });
+    // Sem nenhuma atividade, não há histórico a proteger: a conta pode ser excluída de verdade.
+    await prisma.usuario.delete({ where: { id_usuario: req.userId } });
+    return res.json({ message: 'Sua conta foi excluída com sucesso.', inativada: false });
   } catch (error) {
-    // Rede de segurança: se algum vínculo novo surgir entre a contagem e o
-    // delete, o banco barra e devolvemos 409 em vez de 500.
+    // Rede de segurança: se um vínculo novo surgir entre a contagem e o delete, o banco barra e inativamos.
     if (error.code === 'P2003') {
-      return res.status(409).json({ error: 'Não é possível excluir: existem registros vinculados à sua conta.' });
+      await prisma.usuario.update({ where: { id_usuario: req.userId }, data: { inativado_em: new Date(), inativado_motivo: 'Encerrada pela própria pessoa' } }).catch(() => {});
+      return res.json({ message: 'Sua conta foi inativada. Os dados ficam guardados e você pode pedir a reativação à organização do CCPOP.', inativada: true });
     }
-    // Conta já apagada com token ainda válido.
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Conta não encontrada.' });
     }
-    console.error('Erro ao excluir conta:', error);
+    console.error('Erro ao encerrar conta:', error);
     return res.status(500).json({ error: 'Erro ao encerrar conta de usuário.' });
   }
 };
@@ -330,6 +336,8 @@ exports.getAllUsers = async (req, res) => {
     }
     if (req.query.tipo === 'admin') where.administrador = { isNot: null };
     if (req.query.tipo === 'cliente') where.administrador = { is: null };
+    if (req.query.situacao === 'inativa') where.inativado_em = { not: null };
+    if (req.query.situacao === 'ativa') where.inativado_em = null;
 
     const total = await prisma.usuario.count({ where });
     const paginas = Math.max(1, Math.ceil(total / limite));
@@ -353,6 +361,8 @@ exports.getAllUsers = async (req, res) => {
         cidade: true,
         estado: true,
         data_cadastro: true,
+        inativado_em: true,
+        inativado_motivo: true,
         perfil: true,
         administrador: true
       },
@@ -361,7 +371,11 @@ exports.getAllUsers = async (req, res) => {
       take: limite
     });
 
-    return res.json({ itens, total, pagina, limite, paginas });
+    // Quem tem atividade só pode ser inativado: a lista diz isso para a tela esconder o "Excluir".
+    const comAtividade = await usuariosComAtividade(itens.map((u) => u.id_usuario));
+    const itensComAtividade = itens.map((u) => ({ ...u, tem_atividade: comAtividade.has(u.id_usuario) }));
+
+    return res.json({ itens: itensComAtividade, total, pagina, limite, paginas });
   } catch (error) {
     console.error('Erro ao listar usuários:', error);
     return res.status(500).json({ error: 'Erro ao buscar lista de usuários.' });
@@ -480,7 +494,7 @@ exports.adminDeleteUser = async (req, res) => {
       return res.status(409).json({
         error:
           'Não é possível excluir este usuário porque existe histórico vinculado a ele: ' +
-          vinculos.resumo + '.',
+          vinculos.resumo + '. Use "Inativar": a conta deixa de funcionar e o histórico continua guardado.',
         vinculos: vinculos.detalhes
       });
     }
@@ -498,6 +512,45 @@ exports.adminDeleteUser = async (req, res) => {
     }
     console.error('Erro ao excluir usuário pelo painel ADM:', error);
     return res.status(500).json({ error: 'Erro ao remover usuário.' });
+  }
+};
+
+// [ADMIN] Inativar uma conta (soft delete): não entra mais, mas pedidos, ingressos e inscrições continuam guardados.
+// PATCH /api/auth/admin/users/:id_usuario/inativar  { motivo? }
+exports.adminInativarUsuario = async (req, res) => {
+  try {
+    const id = lerId(req.params.id_usuario);
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
+    if (id === req.userId) return res.status(409).json({ error: 'Você não pode inativar a sua própria conta por aqui.' });
+
+    const alvo = await prisma.usuario.findUnique({ where: { id_usuario: id }, select: { inativado_em: true, administrador: { select: { id_usuario: true } } } });
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (alvo.administrador) return res.status(409).json({ error: 'Este usuário é administrador. Remova o acesso de administrador antes de inativar a conta.' });
+    if (alvo.inativado_em) return res.status(409).json({ error: 'Esta conta já está inativada.' });
+
+    const motivo = typeof req.body?.motivo === 'string' ? req.body.motivo.trim().slice(0, 200) : '';
+    await prisma.usuario.update({ where: { id_usuario: id }, data: { inativado_em: new Date(), inativado_motivo: motivo || 'Inativada pela organização' } });
+    return res.json({ message: 'Conta inativada. Os dados continuam guardados.' });
+  } catch (error) {
+    console.error('Erro ao inativar usuário:', error);
+    return res.status(500).json({ error: 'Erro ao inativar a conta.' });
+  }
+};
+
+// [ADMIN] Reativar uma conta inativada.
+// PATCH /api/auth/admin/users/:id_usuario/reativar
+exports.adminReativarUsuario = async (req, res) => {
+  try {
+    const id = lerId(req.params.id_usuario);
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
+    const alvo = await prisma.usuario.findUnique({ where: { id_usuario: id }, select: { inativado_em: true } });
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (!alvo.inativado_em) return res.status(409).json({ error: 'Esta conta já está ativa.' });
+    await prisma.usuario.update({ where: { id_usuario: id }, data: { inativado_em: null, inativado_motivo: null } });
+    return res.json({ message: 'Conta reativada.' });
+  } catch (error) {
+    console.error('Erro ao reativar usuário:', error);
+    return res.status(500).json({ error: 'Erro ao reativar a conta.' });
   }
 };
 
@@ -542,7 +595,7 @@ exports.adminUpdateUser = async (req, res) => {
   }
 };
 
-// [ADMIN] Remover privilégio de Administrador (rebaixar a Cliente)
+// [ADMIN] Remover privilégio de Administrador (a pessoa volta a ser Cliente)
 exports.demoteAdmin = async (req, res) => {
   try {
     const id_usuario = lerId(req.params.id_usuario);
