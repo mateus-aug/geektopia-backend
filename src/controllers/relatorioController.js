@@ -69,7 +69,7 @@ exports.painel = async (req, res) => {
     // ------------------------------------------------ público (demografia)
     let pessoas;
     if (f.base === 'cadastros') {
-      const us = await prisma.usuario.findMany({ select: { cidade: true, estado: true, genero: true, sexualidade: true, data_nascimento: true } });
+      const us = await prisma.usuario.findMany({ where: { inativado_em: null }, select: { cidade: true, estado: true, genero: true, sexualidade: true, data_nascimento: true } });
       pessoas = us.map((u) => ({ cidade: u.cidade, estado: u.estado, genero: u.genero, sexualidade: u.sexualidade, idade: R.idadeEm(u.data_nascimento) })).filter((p) => R.passaNoFiltro(p, f));
     } else {
       pessoas = vendidos.map((l) => l.pessoa);

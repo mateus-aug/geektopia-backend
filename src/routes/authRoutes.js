@@ -24,6 +24,8 @@ router.post('/admin/users', authMiddleware, adminMiddleware, authController.cria
 router.get('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.obterUsuarioAdmin);
 router.post('/admin/promote/:id_usuario', authMiddleware, adminMiddleware, authController.promoteToAdmin);
 router.delete('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminDeleteUser);
+router.patch('/admin/users/:id_usuario/inativar', authMiddleware, adminMiddleware, authController.adminInativarUsuario);
+router.patch('/admin/users/:id_usuario/reativar', authMiddleware, adminMiddleware, authController.adminReativarUsuario);
 router.put('/admin/users/:id_usuario', authMiddleware, adminMiddleware, authController.adminUpdateUser);
 router.patch('/admin/demote/:id_usuario', authMiddleware, adminMiddleware, authController.demoteAdmin);
 router.get('/admin/relatorio-demografico', authMiddleware, adminMiddleware, authController.relatorioDemografico);
