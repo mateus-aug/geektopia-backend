@@ -18,6 +18,12 @@ function obterTransporte() {
   return transporte;
 }
 
+// O botão diz o que acontece ao clicar. Cada tipo de link tem o seu texto; os demais usam "Abrir no site".
+function rotuloBotao(link) {
+  if (String(link || '').startsWith('/redefinir-senha')) return 'Criar nova senha';
+  return 'Abrir no site';
+}
+
 const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Devolve true se enviou; false se o e-mail não está configurado ou falhou (nunca lança erro).
@@ -31,7 +37,7 @@ async function enviarEmail({ para, assunto, texto, link }) {
       to: para,
       subject: assunto,
       text: `${texto || ''}${url ? `\n\n${url}` : ''}\n\n— Conselho de Cultura POP de Ponta Grossa`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="margin:0 0 12px">${escapar(assunto)}</h2><p style="line-height:1.5">${escapar(texto).replace(/\n/g, '<br>')}</p>${url ? `<p><a href="${escapar(url)}" style="background:#F7C531;color:#16151A;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir no site</a></p>` : ''}<p style="color:#64636B;font-size:13px">Conselho de Cultura POP de Ponta Grossa</p></div>`
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px"><h2 style="margin:0 0 12px">${escapar(assunto)}</h2><p style="line-height:1.5">${escapar(texto).replace(/\n/g, '<br>')}</p>${url ? `<p><a href="${escapar(url)}" style="background:#F7C531;color:#16151A;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">${escapar(rotuloBotao(link))}</a></p>` : ''}<p style="color:#64636B;font-size:13px">Conselho de Cultura POP de Ponta Grossa</p></div>`
     });
     return true;
   } catch (erro) {
