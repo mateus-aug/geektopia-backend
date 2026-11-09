@@ -188,7 +188,7 @@ exports.alterarStatus = async (req, res) => {
         tipo: 'evento_comunidade',
         titulo: status === 'Aprovado' ? 'Seu evento foi aprovado' : 'Seu evento não foi aprovado',
         texto: status === 'Aprovado' ? `"${ev.nome_evento}" foi aprovado. A CCPOP vai avisar quando for publicado.` : `"${ev.nome_evento}": ${motivo}`,
-        link: '/perfil'
+        link: '/perfil?secao=comunidade'
       });
     }
     return res.json(novo);
