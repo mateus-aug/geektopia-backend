@@ -498,19 +498,19 @@ const ARTIGOS = [
     titulo: 'Gerenciar usuários e administradores',
     categoria: 'administracao',
     publicos: ['admin'],
-    resumo: 'Consultar contas, promover a administrador, rebaixar e excluir.',
+    resumo: 'Consultar contas, dar ou remover o acesso de administrador, inativar e excluir.',
     passos: [
       'No painel, abra a gestão de usuários.',
       'Busque a pessoa e abra o cadastro.',
-      'Use as ações de promover a administrador, rebaixar ou excluir.'
+      'Use as ações de dar acesso de administrador, remover esse acesso, inativar ou excluir.'
     ],
     observacoes: [
       'Contas com histórico de compra, inscrição, avaliação ou pedido de espaço não podem ser excluídas: o sistema recusa e mostra o que está vinculado, para preservar o registro do evento.',
-      'Quem é rebaixado perde o acesso ao painel na hora. Quem é promovido precisa sair e entrar de novo para o painel aparecer.',
-      'Você não pode excluir nem rebaixar a sua própria conta por esta tela — é uma trava contra o sistema ficar sem administrador.'
+      'Quem perde o acesso de administrador deixa de ver o painel na hora. Quem recebe o acesso precisa sair e entrar de novo para o painel aparecer.',
+      'Você não pode excluir, inativar nem remover o acesso da sua própria conta por esta tela — é uma trava contra o sistema ficar sem administrador.'
     ],
     relacionados: ['encerrar-conta', 'admin-analisar'],
-    termos: ['usuarios', 'administrador', 'promover', 'rebaixar', 'excluir', 'desativar', 'permissao', 'conselheiro']
+    termos: ['usuarios', 'administrador', 'promover', 'rebaixar', 'remover acesso', 'inativar', 'excluir', 'desativar', 'permissao', 'conselheiro']
   }
 ];
 
