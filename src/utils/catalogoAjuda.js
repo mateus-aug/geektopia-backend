@@ -48,10 +48,11 @@ const ARTIGOS = [
     ],
     observacoes: [
       'O e-mail e o CPF não podem se repetir no sistema. Se aparecer aviso de duplicidade, você provavelmente já tem conta.',
-      'Menores de idade precisam de um responsável vinculado para participar de competições.'
+      'Menores de idade precisam de um responsável vinculado para participar de competições.',
+      'Depois do cadastro enviamos um e-mail com um botão para confirmar o seu endereço. Sem a confirmação você usa o site normalmente, mas ingressos e avisos por e-mail só chegam para e-mails confirmados. Se o e-mail não chegar, use "Reenviar e-mail" na faixa amarela do topo e confira o spam.'
     ],
     relacionados: ['entrar-na-conta', 'esqueci-senha', 'editar-perfil'],
-    termos: ['cadastro', 'cadastrar', 'criar conta', 'registrar', 'nova conta', 'sign up']
+    termos: ['cadastro', 'cadastrar', 'criar conta', 'registrar', 'nova conta', 'sign up', 'confirmar e-mail', 'validar e-mail', 'confirmacao']
   },
   {
     id: 'entrar-na-conta',
