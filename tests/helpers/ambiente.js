@@ -9,6 +9,8 @@ const R = require('path').resolve(__dirname, '..', '..');
 process.chdir(R);
 require(R + '/node_modules/dotenv').config({ quiet: true });
 
+// Imagens de teste ficam SEMPRE no disco local, mesmo que o .env aponte para o Supabase: nenhum teste escreve no bucket de verdade.
+process.env.STORAGE_DRIVER = 'local';
 process.env.MP_ACCESS_TOKEN = 'TOKEN-FALSO-DE-TESTE';
 process.env.NODE_ENV = process.env.NODE_ENV === 'production' ? 'test' : (process.env.NODE_ENV || 'test');
 delete process.env.MP_WEBHOOK_SECRET;

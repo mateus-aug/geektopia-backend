@@ -24,6 +24,7 @@ const ALVOS = [
   ['geektopia', 'banner_url', 'eventos'],
   ['convidado', 'foto_url', 'convidados'],
   ['foto_Edicao', 'url_foto', 'galeria'],
+  ['foto_Site', 'url_foto', 'galeria'],
   ['galeria_Edicoes_Passadas', 'url_foto', 'galeria']
 ];
 

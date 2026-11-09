@@ -33,7 +33,9 @@ function supabase() {
   const url = process.env.SUPABASE_URL;
   const chave = process.env.SUPABASE_SERVICE_KEY;
   if (!url || !chave) throw new Error('STORAGE_DRIVER=supabase exige SUPABASE_URL e SUPABASE_SERVICE_KEY no .env.');
-  clienteSupabase = createClient(url, chave, { auth: { persistSession: false } });
+  // Só usamos o Storage. O cliente também prepara o "realtime", que exige WebSocket nativo (Node 22+) e derrubaria o Node 20;
+  // como nunca nos conectamos a ele, um transporte vazio basta.
+  clienteSupabase = createClient(url, chave, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { transport: class SemRealtime {} } });
   return clienteSupabase;
 }
 const bucket = () => process.env.SUPABASE_BUCKET || 'uploads';
