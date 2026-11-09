@@ -366,15 +366,14 @@ const ARTIGOS = [
     titulo: 'Encerrar a minha conta',
     categoria: 'conta',
     publicos: ['visitante', 'competidor', 'expositor', 'organizador'],
-    resumo: 'Contas com histórico não são apagadas — são desativadas.',
+    resumo: 'Conta sem histórico pode ser apagada; conta com histórico é mantida.',
     passos: [
-      'Abra o seu perfil e procure a opção de encerrar conta.',
-      'Confirme a operação.'
+      'Peça à organização do CCPOP o encerramento da sua conta.',
+      'Se a conta não tiver nenhuma atividade, ela é apagada.'
     ],
     observacoes: [
-      'Se você já comprou ingresso, se inscreveu em competição ou pediu espaço, a conta não é apagada: ela é desativada. Isso preserva o histórico financeiro e a lista de presença, que a organização precisa manter.',
-      'Conta desativada não entra mais no sistema e não aparece nas listagens.',
-      'Para apagar definitivamente os seus dados, fale com a organização do CCPOP.'
+      'Se você já comprou ingresso, se inscreveu em competição, enviou avaliação ou pediu espaço, a conta não é apagada. Isso preserva o histórico financeiro e a lista de presença, que a organização precisa manter.',
+      'Nesse caso o sistema mostra exatamente o que está vinculado à conta, e a organização combina com você o que fazer.'
     ],
     relacionados: ['editar-perfil'],
     termos: ['excluir conta', 'apagar conta', 'encerrar', 'deletar', 'cancelar cadastro']
@@ -499,18 +498,19 @@ const ARTIGOS = [
     titulo: 'Gerenciar usuários e administradores',
     categoria: 'administracao',
     publicos: ['admin'],
-    resumo: 'Consultar contas, promover a administrador e desativar.',
+    resumo: 'Consultar contas, promover a administrador, rebaixar e excluir.',
     passos: [
       'No painel, abra a gestão de usuários.',
       'Busque a pessoa e abra o cadastro.',
-      'Use as ações de promover a administrador, rebaixar ou desativar.'
+      'Use as ações de promover a administrador, rebaixar ou excluir.'
     ],
     observacoes: [
-      'Contas com histórico de compra ou inscrição não são apagadas: são desativadas, para preservar o registro do evento.',
+      'Contas com histórico de compra, inscrição, avaliação ou pedido de espaço não podem ser excluídas: o sistema recusa e mostra o que está vinculado, para preservar o registro do evento.',
+      'Quem é rebaixado perde o acesso ao painel na hora. Quem é promovido precisa sair e entrar de novo para o painel aparecer.',
       'Você não pode excluir nem rebaixar a sua própria conta por esta tela — é uma trava contra o sistema ficar sem administrador.'
     ],
     relacionados: ['encerrar-conta', 'admin-analisar'],
-    termos: ['usuarios', 'administrador', 'promover', 'rebaixar', 'desativar', 'permissao', 'conselheiro']
+    termos: ['usuarios', 'administrador', 'promover', 'rebaixar', 'excluir', 'desativar', 'permissao', 'conselheiro']
   }
 ];
 

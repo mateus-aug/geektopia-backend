@@ -2,6 +2,12 @@ const prisma = require('../config/prisma');
 const { notificar, notificarAdmins } = require('../services/notificacoes');
 const { lerId, lerTexto, lerLink } = require('../utils/validadores');
 const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
+const { travarEdicao, exigirNickLivre, NickEmUso } = require('../utils/nicknameEvento');
+
+// Sinaliza, de dentro da transação, que a inscrição já existe (clique duplo).
+class InscricaoDuplicada extends Error {
+  constructor(existente) { super('inscrição duplicada'); this.existente = existente; }
+}
 
 // Inscrição de competidores nas competições da GEEKTOPIA.
 //
@@ -15,6 +21,13 @@ const { gerarOuRetomarCobranca } = require('../services/cobrancaService');
 
 // Valores aceitos pelo enum StatusInscricaoCompeticaoEnum do schema.prisma.
 const STATUS_VALIDOS = ['AguardandoPagamento', 'EmAnalise', 'Aprovado', 'Reprovado'];
+
+// Como cada status aparece para a pessoa (o nome do enum é interno).
+const ROTULO_STATUS = {
+  AguardandoPagamento: 'aguardando pagamento',
+  EmAnalise: 'em análise',
+  Aprovado: 'aprovada'
+};
 
 // Enquanto está num destes, o competidor ainda pode mexer ou cancelar.
 const STATUS_ABERTOS = ['AguardandoPagamento', 'EmAnalise'];
@@ -168,6 +181,7 @@ exports.criar = async (req, res) => {
     const competicao = await prisma.competicao.findUnique({
       where: { id_competicao: idCompeticao },
       select: {
+        id_geektopia: true,
         modalidade: true,
         valor_taxa_inscricao: true,
         geektopia: { select: { status_evento: true } }
@@ -200,7 +214,7 @@ exports.criar = async (req, res) => {
 
     if (jaExiste) {
       return res.status(409).json({
-        error: `Você já possui uma inscrição nesta competição (status: ${jaExiste.status_inscricao}).`,
+        error: `Você já possui uma inscrição nesta competição (${ROTULO_STATUS[jaExiste.status_inscricao] || 'em andamento'}).`,
         id_inscricao: jaExiste.id_inscricao
       });
     }
@@ -240,6 +254,24 @@ exports.criar = async (req, res) => {
     const taxa = paraNumero(competicao.valor_taxa_inscricao) || 0;
 
     const nova = await prisma.$transaction(async (tx) => {
+      // Fila por edição: quem chegar junto espera (ver utils/nicknameEvento.js).
+      await travarEdicao(tx, competicao.id_geektopia);
+
+      // A checagem "já inscrito" lá de cima é a resposta educada; esta, sob a
+      // trava, é a garantia. Sem ela, um clique duplo criava duas inscrições.
+      const duplicada = await tx.inscricao_Competicao.findFirst({
+        where: { id_usuario: req.userId, id_competicao: idCompeticao, status_inscricao: { not: 'Reprovado' } },
+        select: { id_inscricao: true }
+      });
+      if (duplicada) throw new InscricaoDuplicada(duplicada);
+
+      // Nickname único na edição (pedido dos professores).
+      await exigirNickLivre(tx, {
+        idUsuario: req.userId,
+        nickname: competidor.nickname_competidor,
+        idGeektopia: competicao.id_geektopia
+      });
+
       let idEquipe = equipeExistente.valor;
       if (equipeNova) {
         const criada = await tx.equipe_Competicao.create({
@@ -271,7 +303,17 @@ exports.criar = async (req, res) => {
         ? `Inscrição enviada! A organização vai analisar o seu material. Se for aprovada, você paga a taxa de R$ ${taxa.toFixed(2)} para confirmar a vaga.`
         : 'Inscrição enviada! A organização vai analisar o seu material e você acompanha o resultado por aqui.',
       inscricao: montarResposta(nova)
-    });  } catch (error) {
+    });
+  } catch (error) {
+    if (error instanceof NickEmUso) {
+      return res.status(409).json({ error: error.message, campo: error.campo });
+    }
+    if (error instanceof InscricaoDuplicada) {
+      return res.status(409).json({
+        error: 'Você já possui uma inscrição nesta competição.',
+        id_inscricao: error.existente.id_inscricao
+      });
+    }
     console.error('Erro ao criar inscrição:', error);
     return res.status(500).json({ error: 'Erro ao realizar a inscrição.' });
   }

@@ -1,9 +1,14 @@
 // Conversões de entrada. Devolvem o valor convertido ou null; quem responde é o controller.
 
 // Inteiro positivo ou null.
+// Maior valor que cabe numa coluna "int" do PostgreSQL. Um id acima disso
+// passava aqui (é inteiro positivo para o JavaScript) e o banco recusava
+// com "Value out of range": a pessoa recebia 500 em vez de 400/404.
+const MAIOR_INT_DO_BANCO = 2147483647;
+
 function lerId(valor) {
   const numero = Number(valor);
-  return Number.isInteger(numero) && numero > 0 ? numero : null;
+  return Number.isInteger(numero) && numero > 0 && numero <= MAIOR_INT_DO_BANCO ? numero : null;
 }
 
 // Date válida ou null. Só aceita string.

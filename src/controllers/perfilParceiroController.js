@@ -2,6 +2,7 @@ const prisma = require('../config/prisma');
 const { lerId, lerTexto, lerLink } = require('../utils/validadores');
 const { urlDoUpload, apagarArquivoLocal, descartarUpload } = require('../utils/arquivos');
 const { notificar } = require('../services/notificacoes');
+const { travarEdicao, exigirNickLivre, edicoesEmAndamento, NickEmUso } = require('../utils/nicknameEvento');
 
 // Perfis de parceiro do evento. O cadastro (authController) cria só o
 // Usuario; é aqui que o usuário logado assume um papel a mais:
@@ -394,13 +395,29 @@ exports.atualizarCompetidor = async (req, res) => {
       return res.status(404).json({ error: 'Você ainda não possui perfil de competidor.' });
     }
 
-    const atualizado = await prisma.competidor.update({
-      where: { id_usuario: req.userId },
-      data: dados
+    const atualizado = await prisma.$transaction(async (tx) => {
+      // Trocar o nick depois de inscrito não pode virar atalho para burlar a
+      // regra de nickname único por edição: confere em todas as edições em
+      // andamento onde a pessoa está inscrita. Trava em ordem crescente de id
+      // para duas trocas simultâneas nunca esperarem uma pela outra em ciclo.
+      if (dados.nickname_competidor !== undefined) {
+        for (const idGeektopia of await edicoesEmAndamento(tx, req.userId)) {
+          await travarEdicao(tx, idGeektopia);
+          await exigirNickLivre(tx, { idUsuario: req.userId, nickname: dados.nickname_competidor, idGeektopia });
+        }
+      }
+
+      return tx.competidor.update({
+        where: { id_usuario: req.userId },
+        data: dados
+      });
     });
 
     return res.json({ message: 'Perfil de competidor atualizado!', competidor: atualizado });
   } catch (error) {
+    if (error instanceof NickEmUso) {
+      return res.status(409).json({ error: error.message, campo: error.campo });
+    }
     console.error('Erro ao atualizar perfil de competidor:', error);
     return res.status(500).json({ error: 'Erro ao atualizar o perfil de competidor.' });
   }

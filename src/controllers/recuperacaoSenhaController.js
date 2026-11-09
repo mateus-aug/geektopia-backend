@@ -153,7 +153,7 @@ exports.redefinir = async (req, res) => {
         'A senha da sua conta no NEXUS acabou de ser redefinida pelo link de ' +
         'recuperação. Se não foi você, entre em contato com a organização do ' +
         'CCPOP imediatamente.',
-      link: '/entrar'
+      link: '/login'
     });
 
     return res.json({

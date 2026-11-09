@@ -26,6 +26,14 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '200kb' }));
+// No Express 5, requisição sem corpo JSON deixa req.body como undefined (no 4
+// era {}). Aí todo "const { x } = req.body" dos controllers estourava e virava
+// 500. Com um objeto vazio, a validação de cada rota responde o 400 certo.
+// O multer (uploads) substitui este objeto pelo dele normalmente.
+app.use((req, _res, next) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
 app.use('/api', (req, res, next) => (req.path === '/pedidos/webhook' ? next() : limites.geral(req, res, next)));
 
 // Todas as rotas ficarão sob /api

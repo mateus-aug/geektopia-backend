@@ -7,6 +7,7 @@ const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/valid
 const { validarGenero, validarSexualidade } = require('../utils/genero');
 const { VERSAO_TERMOS } = require('../utils/termos');
 const { contarVinculos } = require('../utils/vinculosUsuario');
+const { lerId } = require('../utils/validadores');
 
 // ===================================================
 // 1. AUTENTICAÇÃO E CADASTRO
@@ -56,6 +57,10 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, senha } = req.body;
+
+    if (typeof email !== 'string' || !email.trim() || typeof senha !== 'string' || !senha) {
+      return res.status(400).json({ error: 'Informe o e-mail e a senha.' });
+    }
 
     const user = await prisma.usuario.findUnique({
       where: { email },
@@ -126,7 +131,26 @@ exports.getMe = async (req, res) => {
 // Atualizar dados do perfil do usuário logado
 exports.updateProfile = async (req, res) => {
   try {
-    const { nome_completo, telefone, cidade, estado, nickname, avatar_url } = req.body;
+    // avatar_url NÃO é aceito aqui: a foto só muda pelo upload-avatar. Antes,
+    // dava para gravar o endereço de uma imagem de OUTRA pessoa (banner da
+    // edição, foto de convidado...) e, no upload seguinte, o sistema apagava
+    // esse arquivo achando que era o "avatar anterior". O front só ecoava o
+    // valor atual neste campo, então ignorá-lo não muda nada para a tela.
+    const { nickname } = req.body;
+
+    // Nome, telefone, cidade e UF passam pelas MESMAS regras do cadastro.
+    // Antes entravam crus: nome vazio (o nome some do canto da tela), UF "XX"
+    // no relatório demográfico, e texto comprido demais virava 500.
+    const basicos = {};
+    for (const campo of ['nome_completo', 'telefone', 'cidade', 'estado']) {
+      if (req.body[campo] !== undefined) basicos[campo] = req.body[campo];
+    }
+    const validacao = validarUsuario(basicos, { parcial: true });
+    if (validacao.erro) return res.status(400).json({ error: validacao.erro, campo: validacao.campo });
+
+    if (nickname !== undefined && nickname !== null && (typeof nickname !== 'string' || nickname.trim().length > 30)) {
+      return res.status(400).json({ error: 'O nickname deve ter no máximo 30 caracteres.', campo: 'nickname' });
+    }
 
     // Gênero e sexualidade só entram se vierem (o perfil pode salvar sem mexer neles).
     const extras = {};
@@ -139,20 +163,16 @@ exports.updateProfile = async (req, res) => {
     }
 
     const dadosPerfil = {};
-    if (nickname !== undefined && nickname !== '') dadosPerfil.nickname = nickname;
-    if (avatar_url !== undefined) dadosPerfil.avatar_url = avatar_url;
+    if (typeof nickname === 'string' && nickname.trim() !== '') dadosPerfil.nickname = nickname.trim();
 
     const updatedUser = await prisma.usuario.update({
       where: { id_usuario: req.userId },
       data: {
-        nome_completo,
-        telefone,
-        cidade,
-        estado,
+        ...validacao.dados,
         ...extras,
         perfil: {
           upsert: {
-            create: { nickname: nickname || null, avatar_url },
+            create: { nickname: dadosPerfil.nickname || null },
             update: dadosPerfil
           }
         }
@@ -163,6 +183,14 @@ exports.updateProfile = async (req, res) => {
     delete updatedUser.senha;
     return res.json({ message: 'Perfil atualizado com sucesso!', user: updatedUser });
   } catch (error) {
+    // Perfil.nickname é único no banco: repetido virava 500.
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Esse nickname já está em uso por outra pessoa. Escolha outro.', campo: 'nickname' });
+    }
+    // Conta apagada com token ainda válido.
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Conta não encontrada. Entre novamente.' });
+    }
     console.error('Erro ao atualizar perfil:', error);
     return res.status(500).json({ error: 'Erro ao atualizar dados do perfil.' });
   }
@@ -231,6 +259,10 @@ exports.deleteMyAccount = async (req, res) => {
     if (error.code === 'P2003') {
       return res.status(409).json({ error: 'Não é possível excluir: existem registros vinculados à sua conta.' });
     }
+    // Conta já apagada com token ainda válido.
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Conta não encontrada.' });
+    }
     console.error('Erro ao excluir conta:', error);
     return res.status(500).json({ error: 'Erro ao encerrar conta de usuário.' });
   }
@@ -259,7 +291,11 @@ exports.uploadAvatar = async (req, res) => {
     });
 
     // A foto antiga sai do armazenamento (evita acumular lixo a cada troca de foto).
-    if (anterior?.avatar_url && anterior.avatar_url !== avatarUrl) apagarArquivoLocal(anterior.avatar_url);
+    // Só apaga se o anterior estiver na pasta de avatares: proteção extra para
+    // registros antigos que possam apontar para imagem de outra área do site.
+    if (anterior?.avatar_url && anterior.avatar_url !== avatarUrl && anterior.avatar_url.includes('/avatars/')) {
+      apagarArquivoLocal(anterior.avatar_url);
+    }
 
     return res.json({ message: 'Foto atualizada com sucesso!', avatar_url: avatarUrl });
   } catch (error) {
@@ -335,8 +371,8 @@ exports.getAllUsers = async (req, res) => {
 // GET /api/auth/admin/users/:id_usuario - um usuário completo (para editar)
 exports.obterUsuarioAdmin = async (req, res) => {
   try {
-    const id = Number(req.params.id_usuario);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
+    const id = lerId(req.params.id_usuario);
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
 
     const usuario = await prisma.usuario.findUnique({
       where: { id_usuario: id },
@@ -391,11 +427,16 @@ exports.criarUsuarioAdmin = async (req, res) => {
 // [ADMIN] Promover um usuário a Administrador
 exports.promoteToAdmin = async (req, res) => {
   try {
-    const { id_usuario } = req.params;
+    const id_usuario = lerId(req.params.id_usuario);
     const { nivel_permissao } = req.body;
 
+    if (!id_usuario) return res.status(400).json({ error: 'Identificador inválido.' });
+    if (nivel_permissao !== undefined && !NIVEIS_ADMIN.includes(nivel_permissao)) {
+      return res.status(400).json({ error: 'Nível de permissão inválido. Use: ' + NIVEIS_ADMIN.join(' ou ') + '.', campo: 'nivel_permissao' });
+    }
+
     const targetUser = await prisma.usuario.findUnique({
-      where: { id_usuario: Number(id_usuario) },
+      where: { id_usuario },
       include: { administrador: true }
     });
 
@@ -409,7 +450,7 @@ exports.promoteToAdmin = async (req, res) => {
 
     const newAdmin = await prisma.administrador.create({
       data: {
-      id_usuario: Number(id_usuario),
+      id_usuario,
       nivel_permissao: nivel_permissao || 'ADMIN_CONTEUDO'
      }
     });
@@ -424,8 +465,8 @@ exports.promoteToAdmin = async (req, res) => {
 // [ADMIN] Excluir qualquer usuário por ID
 exports.adminDeleteUser = async (req, res) => {
   try {
-    const id = Number(req.params.id_usuario);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
+    const id = lerId(req.params.id_usuario);
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
 
     if (id === req.userId) {
       return res.status(409).json({ error: 'Você não pode excluir a sua própria conta por aqui.' });
@@ -465,8 +506,8 @@ exports.adminDeleteUser = async (req, res) => {
 // Edita os dados cadastrais (o que veio no corpo). Senha não muda por aqui.
 exports.adminUpdateUser = async (req, res) => {
   try {
-    const id = Number(req.params.id_usuario);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Identificador inválido.' });
+    const id = lerId(req.params.id_usuario);
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
 
     const alvo = await prisma.usuario.findUnique({ where: { id_usuario: id } });
     if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -504,17 +545,24 @@ exports.adminUpdateUser = async (req, res) => {
 // [ADMIN] Remover privilégio de Administrador (rebaixar a Cliente)
 exports.demoteAdmin = async (req, res) => {
   try {
-    const { id_usuario } = req.params;
+    const id_usuario = lerId(req.params.id_usuario);
+    if (!id_usuario) return res.status(400).json({ error: 'Identificador inválido.' });
+
+    // Mesma trava da exclusão: ninguém rebaixa a si mesmo por aqui, para o
+    // sistema nunca ficar sem administrador por engano.
+    if (id_usuario === req.userId) {
+      return res.status(409).json({ error: 'Você não pode remover os seus próprios privilégios de administrador.' });
+    }
 
     const admin = await prisma.administrador.findUnique({
-      where: { id_usuario: Number(id_usuario) }
+      where: { id_usuario }
     });
 
     if (!admin) {
       return res.status(404).json({ error: 'Este usuário não é administrador.' });
     }
 
-    await prisma.administrador.delete({ where: { id_usuario: Number(id_usuario) } });
+    await prisma.administrador.delete({ where: { id_usuario } });
 
     return res.json({ message: 'Privilégios de administrador removidos com sucesso!' });
   } catch (error) {

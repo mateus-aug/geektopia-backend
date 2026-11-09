@@ -12,6 +12,10 @@ require(R + '/node_modules/dotenv').config({ quiet: true });
 process.env.MP_ACCESS_TOKEN = 'TOKEN-FALSO-DE-TESTE';
 process.env.NODE_ENV = process.env.NODE_ENV === 'production' ? 'test' : (process.env.NODE_ENV || 'test');
 delete process.env.MP_WEBHOOK_SECRET;
+// E-mail SEMPRE desligado nos testes: os endereços são falsos (zz.*@teste.local).
+delete process.env.SMTP_HOST;
+delete process.env.SMTP_USER;
+delete process.env.SMTP_PASS;
 
 // Estado controlável da simulação.
 const INICIO = new Date(); // tudo que os testes criarem a partir daqui é apagado no fim

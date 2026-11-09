@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test --test-concurrency=1 tests/",
+    "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
     "dev": "nodemon src/server.js"
   },
   "keywords": [],
