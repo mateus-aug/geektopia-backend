@@ -11,8 +11,9 @@ async function notificar(idUsuario, { tipo, titulo, texto = null, link = null, e
   try {
     const n = await prisma.notificacao.create({ data: { id_usuario: idUsuario, tipo, titulo: String(titulo).slice(0, 150), texto, link } });
     if (email) {
-      const u = await prisma.usuario.findUnique({ where: { id_usuario: idUsuario }, select: { email: true, inativado_em: true } });
-      if (u?.email && !u.inativado_em) enviarEmail({ para: u.email, assunto: titulo, texto, link });
+      const u = await prisma.usuario.findUnique({ where: { id_usuario: idUsuario }, select: { email: true, inativado_em: true, email_confirmado_em: true } });
+      // Só endereços confirmados recebem e-mail (o aviso no sininho chega para todos).
+      if (u?.email && !u.inativado_em && u.email_confirmado_em) enviarEmail({ para: u.email, assunto: titulo, texto, link });
     }
     return n;
   } catch (erro) {

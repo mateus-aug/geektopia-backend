@@ -10,6 +10,9 @@ const uploadMiddleware = require('../middlewares/uploadMiddleware');
 const limites = require('../middlewares/limites');
 router.post('/register', limites.cadastro, authController.register);
 router.post('/login', limites.login, authController.login);
+const emailController = require('../controllers/emailController');
+router.post('/confirmar-email', limites.login, emailController.confirmar);
+router.post('/reenviar-confirmacao', authMiddleware, limites.reenviarConfirmacao, emailController.reenviar);
 
 // === ROTAS DO CLIENTE LOGADO ===
 router.get('/me', authMiddleware, authController.getMe);

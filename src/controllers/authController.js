@@ -5,6 +5,7 @@ const { apagarArquivoLocal } = require('../utils/arquivos');
 const { senhaAtendeRequisitos } = require('../utils/validarSenha');
 const { validarUsuario, buscarConflito, NIVEIS_ADMIN } = require('../utils/validacaoUsuario');
 const { validarGenero, validarSexualidade } = require('../utils/genero');
+const { enviarConfirmacaoEmail } = require('../services/confirmacaoEmail');
 const { VERSAO_TERMOS } = require('../utils/termos');
 const { contarVinculos, usuariosComAtividade } = require('../utils/vinculosUsuario');
 const { lerId } = require('../utils/validadores');
@@ -43,6 +44,9 @@ exports.register = async (req, res) => {
     const newUser = await prisma.usuario.create({
       data: { ...resto, senha: await bcrypt.hash(senha, 10), termos_aceitos_em: new Date(), termos_versao: VERSAO_TERMOS }
     });
+
+    // E-mail de confirmação: sem await (não atrasa o cadastro) e nunca derruba o cadastro se o envio falhar.
+    enviarConfirmacaoEmail(newUser);
 
     delete newUser.senha;
 
@@ -581,9 +585,11 @@ exports.adminUpdateUser = async (req, res) => {
     const conflito = await buscarConflito(prisma, dados, id);
     if (conflito) return res.status(409).json({ error: conflito.erro, campo: conflito.campo });
 
+    // Trocar o e-mail pelo painel tira a confirmação: o endereço novo ainda não foi verificado.
+    const mudouEmail = dados.email !== undefined && dados.email !== alvo.email;
     const atualizado = await prisma.usuario.update({
       where: { id_usuario: id },
-      data: dados,
+      data: mudouEmail ? { ...dados, email_confirmado_em: null } : dados,
       include: { administrador: true, perfil: true }
     });
 

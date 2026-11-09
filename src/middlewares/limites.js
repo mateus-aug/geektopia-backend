@@ -35,6 +35,14 @@ const cadastro = criar({
   mensagem: 'Muitos cadastros a partir desta conexão. Tente novamente mais tarde.'
 });
 
+// Reenviar o e-mail de confirmação: poucas vezes por hora por pessoa (não dá para usar o site para encher a caixa de alguém).
+const reenviarConfirmacao = criar({
+  janelaMin: 60,
+  get max() { return num('LIMITE_REENVIO_MAX', 4); },
+  mensagem: 'Você já pediu o e-mail de confirmação várias vezes. Aguarde um pouco e confira o spam.',
+  chave: (req) => `c${req.userId || req.ip}`
+});
+
 // Uploads: cada pessoa logada tem uma cota por hora (o armazenamento é o recurso mais caro).
 const upload = criar({
   janelaMin: 60,
@@ -50,4 +58,4 @@ const geral = criar({
   mensagem: 'Muitas requisições. Aguarde um instante.'
 });
 
-module.exports = { login, cadastro, upload, geral };
+module.exports = { reenviarConfirmacao, login, cadastro, upload, geral };
