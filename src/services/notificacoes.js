@@ -21,10 +21,18 @@ async function notificar(idUsuario, { tipo, titulo, texto = null, link = null, e
   }
 }
 
+// Teto de avisos NÃO LIDOS do mesmo tipo por administrador: se alguém (ou um robô) gerar centenas de pedidos, o sininho
+// não vira uma avalanche. Os 30 primeiros bastam para o admin ver que há fila; ao ler, os próximos voltam a chegar.
+const TETO_NAO_LIDAS_POR_TIPO = 30;
+
 async function notificarAdmins(dados) {
   try {
     const admins = await prisma.administrador.findMany({ select: { id_usuario: true } });
-    await Promise.all(admins.map((a) => notificar(a.id_usuario, { ...dados, email: false })));
+    await Promise.all(admins.map(async (a) => {
+      const acumuladas = await prisma.notificacao.count({ where: { id_usuario: a.id_usuario, tipo: dados.tipo, lida: false } });
+      if (acumuladas >= TETO_NAO_LIDAS_POR_TIPO) return null;
+      return notificar(a.id_usuario, { ...dados, email: false });
+    }));
   } catch (erro) {
     console.error('Falha ao notificar administradores:', erro.message);
   }

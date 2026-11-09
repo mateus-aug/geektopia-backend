@@ -89,6 +89,7 @@ async function limparZZ() {
   await prisma.notificacao.deleteMany({ where: { id_usuario: { in: admins }, criada_em: { gte: INICIO } } });
   const us = (await prisma.usuario.findMany({ where: { email: { startsWith: 'zz.' } }, select: { id_usuario: true } })).map((u) => u.id_usuario);
   const eds = (await prisma.geektopia.findMany({ where: { nome_edicao: { startsWith: 'ZZ' } }, select: { id_geektopia: true } })).map((e) => e.id_geektopia);
+  await prisma.feedback.deleteMany({ where: { OR: [{ id_usuario: { in: us } }, { id_geektopia: { in: eds } }] } });
   await prisma.ingresso.deleteMany({ where: { OR: [{ id_usuario: { in: us } }, { id_geektopia: { in: eds } }] } });
   const peds = (await prisma.pedido.findMany({ where: { id_usuario: { in: us } }, select: { id_pedido: true } })).map((p) => p.id_pedido);
   await prisma.solicitacao_Espaco.updateMany({ where: { id_pedido: { in: peds } }, data: { id_pedido: null } });
